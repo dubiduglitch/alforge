@@ -110,3 +110,12 @@ gitget timer remove              # Disable automatic upgrades
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Tip jar
+
+If `gitget` saved you time or keeps your GitHub-downloaded `.deb` packages up to date, you can tip the project:
+
+- [GitHub Sponsors](https://github.com/sponsors/dubiduglitch)
+- [Buy Me a Coffee](https://buymeacoffee.com/dubiduglitch)
+- [Ko-fi](https://ko-fi.com/dubiduglitch)
+- [Liberapay](https://liberapay.com/dubiduglitch)
