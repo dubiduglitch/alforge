@@ -503,6 +503,85 @@ class UriTest(unittest.TestCase):
             uri.parse("alforge://install/github/o/r#frag")
 
 
+class GuiDialogTest(unittest.TestCase):
+    """The zenity/kdialog bridge, the only channel a browser-launched run has."""
+
+    def setUp(self) -> None:
+        ui.configure(quiet=True, json_output=False, color=False)
+        ui.set_assume_yes(False)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bin = Path(self.tmp.name)
+        self.empty = self.bin / "empty"
+        self.empty.mkdir()
+        self.calls = self.bin / "calls.txt"
+        self._write_tool("zenity")
+        os.environ["ALFORGE_TEST_CALLS"] = str(self.calls)
+        os.environ["ALFORGE_TEST_EXIT"] = "0"
+        self._saved_path = os.environ["PATH"]
+        os.environ["PATH"] = f"{self.bin}:{self._saved_path}"
+        self.addCleanup(self._restore)
+
+    def _write_tool(self, name: str) -> None:
+        script = self.bin / name
+        script.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$*" >> "$ALFORGE_TEST_CALLS"\n'
+            'exit "${ALFORGE_TEST_EXIT:-0}"\n'
+        )
+        script.chmod(0o755)
+
+    def _restore(self) -> None:
+        os.environ["PATH"] = self._saved_path
+        for name in ("ALFORGE_TEST_CALLS", "ALFORGE_TEST_EXIT"):
+            os.environ.pop(name, None)
+
+    def _recorded(self) -> str:
+        return self.calls.read_text() if self.calls.exists() else ""
+
+    def test_confirm_gui_asks_a_question(self):
+        self.assertTrue(ui.confirm_gui("Install foo?"))
+        self.assertIn("--question", self._recorded())
+        self.assertIn("Install foo?", self._recorded())
+
+    def test_confirm_gui_honours_a_refusal(self):
+        os.environ["ALFORGE_TEST_EXIT"] = "1"
+        self.assertFalse(ui.confirm_gui("Install foo?"))
+
+    def test_gui_error_shows_the_hint(self):
+        self.assertTrue(ui.gui_error("no .deb asset in this release", hint="archives only"))
+        recorded = self._recorded()
+        self.assertIn("--error", recorded)
+        self.assertIn("no .deb asset in this release", recorded)
+        self.assertIn("archives only", recorded)
+
+    def test_gui_info_self_dismisses(self):
+        self.assertTrue(ui.gui_info("Installed foo 1.0"))
+        recorded = self._recorded()
+        self.assertIn("--info", recorded)
+        self.assertIn("--timeout=", recorded)
+
+    def test_no_dialog_tool_refuses_instead_of_assuming(self):
+        os.environ["PATH"] = str(self.empty)
+        self.assertIsNone(ui.dialog_tool())
+        self.assertFalse(ui.confirm_gui("Install foo?"))
+        self.assertTrue(ui.confirm_gui("Install foo?", default=True))
+        self.assertFalse(ui.gui_error("nope"))
+        self.assertFalse(ui.gui_info("nope"))
+        self.assertEqual(self._recorded(), "")
+
+    def test_kdialog_is_used_when_zenity_is_absent(self):
+        (self.bin / "zenity").unlink()
+        self._write_tool("kdialog")
+        self.assertEqual(ui.dialog_tool(), "kdialog")
+        self.assertTrue(ui.confirm_gui("Install foo?"))
+        ui.gui_error("boom")
+        ui.gui_info("done")
+        recorded = self._recorded()
+        self.assertIn("--yesno", recorded)
+        self.assertIn("--error", recorded)
+        self.assertIn("--passivepopup", recorded)
+
+
 class _SandboxedTest(unittest.TestCase):
     """Redirects the XDG directories into a throwaway directory."""
 

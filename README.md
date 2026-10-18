@@ -107,6 +107,10 @@ query, a fragment, or an unknown forge, so a random web page can never point the
 pipeline at an artifact of its choosing. A missing dialog tool refuses too —
 approval is never assumed.
 
+A page can start alforge, so the run is never silent: a failure (no `.deb`
+published, unknown repository, bad URI) raises an error box, and a success or an
+up-to-date check shows a short pop-up.
+
 Load the extension (a copy ships at `/usr/share/alforge/extension/chrome`):
 
 1. Install `zenity` or `kdialog` for the confirmation dialog.

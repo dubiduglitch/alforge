@@ -1,3 +1,13 @@
+alforge (0.2.1-1) unstable; urgency=medium
+
+  * Fix: a browser-launched install was silent when it failed. Errors such as
+    "no .deb asset in this release", an unknown repository or a malformed URI
+    went to stderr, which the browser discards. They now raise a zenity/kdialog
+    error box, and a successful install (or an up-to-date check) shows a short
+    pop-up, so the button always answers.
+
+ -- dubiduglitch <dubiduglitch@users.noreply.github.com>  Sun, 18 Oct 2026 01:30:00 +0000
+
 alforge (0.2.0-1) unstable; urgency=medium
 
   * Browser integration: register the alforge:// URI scheme with a .desktop

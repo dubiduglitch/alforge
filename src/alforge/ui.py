@@ -198,11 +198,24 @@ def confirm(question: str, *, default: bool = False) -> bool:
 #: Graphical dialog programs, in order of preference.
 _DIALOG_TOOLS = ("zenity", "kdialog")
 
+#: Seconds a success pop-up stays on screen before dismissing itself.
+_INFO_TIMEOUT = 6
 
-def _dialog_command(tool: str, question: str) -> list[str]:
+
+def _dialog_command(tool: str, kind: str, text: str) -> list[str]:
+    """Build the argv for a zenity/kdialog box of the given *kind*."""
     if tool == "zenity":
-        return ["zenity", "--question", "--title=alforge", "--no-wrap", f"--text={question}"]
-    return ["kdialog", "--title", "alforge", "--yesno", question]
+        flag = {"question": "--question", "error": "--error", "info": "--info"}[kind]
+        command = ["zenity", flag, "--title=alforge"]
+        if kind == "info":
+            command.append(f"--timeout={_INFO_TIMEOUT}")
+        command.append(f"--text={text}")
+        return command
+    if kind == "error":
+        return ["kdialog", "--title", "alforge", "--error", text]
+    if kind == "info":
+        return ["kdialog", "--title", "alforge", "--passivepopup", text, str(_INFO_TIMEOUT)]
+    return ["kdialog", "--title", "alforge", "--yesno", text]
 
 
 def dialog_tool() -> str | None:
@@ -211,6 +224,17 @@ def dialog_tool() -> str | None:
         if shutil.which(tool):
             return tool
     return None
+
+
+def _run_dialog(kind: str, text: str) -> subprocess.CompletedProcess | None:
+    """Show a box, or return None when no dialog program is installed."""
+    tool = dialog_tool()
+    if tool is None:
+        return None
+    try:
+        return subprocess.run(_dialog_command(tool, kind, text), check=False)
+    except OSError:
+        return None
 
 
 def confirm_gui(question: str, *, default: bool = False) -> bool:
@@ -223,13 +247,19 @@ def confirm_gui(question: str, *, default: bool = False) -> bool:
     """
     if _ASSUME_YES:
         return True
-    tool = dialog_tool()
-    if tool is None:
-        return default
-    try:
-        return subprocess.run(_dialog_command(tool, question), check=False).returncode == 0
-    except OSError:
-        return default
+    result = _run_dialog("question", question)
+    return default if result is None else result.returncode == 0
+
+
+def gui_error(message: str, *, hint: str | None = None) -> bool:
+    """Show a blocking error box so a browser-launched run is never silent."""
+    text = message if not hint else f"{message}\n\n{hint}"
+    return _run_dialog("error", text) is not None
+
+
+def gui_info(message: str) -> bool:
+    """Show a self-dismissing success pop-up (non-blocking)."""
+    return _run_dialog("info", message) is not None
 
 
 def choose(question: str, options: Sequence[str], *, default: int = 1) -> int | None:
