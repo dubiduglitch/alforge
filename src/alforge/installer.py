@@ -8,7 +8,7 @@ one is a single ``apt-get`` call at the end.
 from __future__ import annotations
 
 import os
-import tempfile
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,7 +81,19 @@ def plan(
             hint="check the repository name, or that it really cuts releases",
         )
     if release.prerelease and not allow_prerelease:
-        ui.warn(f"{target}: latest release {release.tag} is marked as a pre-release")
+        stable = provider.latest_stable_release(target.path)
+        if stable is not None and stable.tag != release.tag:
+            ui.detail(
+                f"{target}: skipping pre-release {release.tag} in favour of {stable.tag}"
+            )
+            release = stable
+        elif stable is None:
+            ui.warn(
+                f"{target}: only pre-releases are published, using {release.tag}"
+            )
+            ui.detail("pass --allow-prerelease to silence this warning")
+        else:
+            ui.warn(f"{target}: latest release {release.tag} is marked as a pre-release")
 
     candidates: tuple[Asset, ...] = release.assets
     if asset_filter:
@@ -134,32 +146,59 @@ def up_to_date(context, candidate: Plan) -> bool:  # noqa: ANN001 - Context
 # --------------------------------------------------------------------------- #
 # download
 # --------------------------------------------------------------------------- #
+def _cache_slug(candidate: Plan) -> str:
+    """Filesystem-safe per-target prefix for cache file names."""
+    return re.sub(r"[^a-z0-9]+", "-", str(candidate.target).lower()).strip("-")
+
+
+def cached_path(context, candidate: Plan) -> Path:  # noqa: ANN001 - Context
+    """Deterministic cache location of the exact artifact a plan describes."""
+    ident = re.sub(r"[^A-Za-z0-9._-]+", "-", candidate.asset_id).strip("-")
+    return context.download_dir() / f"{_cache_slug(candidate)}--{ident}.deb"
+
+
+def _prune_cache(context, candidate: Plan, *, keep: Path) -> None:  # noqa: ANN001
+    """Drop older artifacts for the same target so the cache cannot grow forever."""
+    for stale in context.download_dir().glob(f"{_cache_slug(candidate)}--*.deb"):
+        if stale != keep:
+            stale.unlink(missing_ok=True)
+
+
 def download(context, candidate: Plan) -> Path:  # noqa: ANN001 - Context
-    directory = context.download_dir()
-    handle, name = tempfile.mkstemp(prefix="alforge-", suffix=".deb", dir=directory)
-    os.close(handle)
-    destination = Path(name)
+    """Fetch the artifact into the cache, reusing a previous download.
+
+    ``--download-only`` runs (and the timer in download mode) would otherwise
+    fetch the same file on every invocation; because the file name is derived
+    from the asset id, an unchanged release is reused as-is.
+    """
+    destination = cached_path(context, candidate)
+    if destination.exists() and destination.stat().st_size > 0:
+        ui.detail(f"reusing cached {destination.name}")
+        return destination
+
     ui.info(
         f"downloading {candidate.asset.name}{_size_label(candidate.asset.size)} "
         f"from {candidate.target}"
     )
-    written = 0
+    partial = destination.with_name(destination.name + ".part")
     try:
-        with destination.open("wb") as sink:
+        with partial.open("wb") as sink:
             written = context.client.download(
                 candidate.asset.url, sink.write, forge=candidate.target.forge
             )
+        if written == 0:
+            raise AlforgeError(f"empty download for {candidate.asset.name}")
+        if candidate.asset.size and written != candidate.asset.size:
+            ui.warn(
+                f"size mismatch for {candidate.asset.name}: "
+                f"expected {candidate.asset.size} bytes, got {written}"
+            )
+        os.replace(partial, destination)
+        destination.chmod(0o600)
     except Exception:
-        destination.unlink(missing_ok=True)
+        partial.unlink(missing_ok=True)
         raise
-    if written == 0:
-        destination.unlink(missing_ok=True)
-        raise AlforgeError(f"empty download for {candidate.asset.name}")
-    if candidate.asset.size and written != candidate.asset.size:
-        ui.warn(
-            f"size mismatch for {candidate.asset.name}: "
-            f"expected {candidate.asset.size} bytes, got {written}"
-        )
+    _prune_cache(context, candidate, keep=destination)
     return destination
 
 
@@ -223,10 +262,11 @@ def local_install(
     candidate: Plan,
     path: Path,
     *,
+    info: deb.PackageInfo | None = None,
     recommend: bool = True,
 ) -> deb.PackageInfo:
     """Validate the artifact and hand it to apt."""
-    info = deb.package_info(path)
+    info = info or deb.package_info(path)
     other = conflicting_target(context, candidate.target, info.name)
     if other is not None:
         raise AlforgeError(
@@ -262,28 +302,31 @@ def run(
     download_only: bool = False,
     recommend: bool = True,
     require_checksum: bool | None = None,
+    allow_prerelease: bool = False,
 ) -> tuple[Plan, Path, deb.PackageInfo | None, str | None]:
     """Full pipeline for one target.
 
-    Returns (plan, artifact path, installed package info, verified sha256).
-    ``package info`` is None when ``download_only`` is set.
+    Returns (plan, artifact path, package info, verified sha256).  ``package
+    info`` is None only when the target was already up to date and nothing ran;
+    in ``download_only`` mode it is the control data read from the artifact.
     """
-    candidate = plan(context, target, asset_filter=asset_filter)
+    candidate = plan(
+        context, target, asset_filter=asset_filter, allow_prerelease=allow_prerelease
+    )
+    entry = context.state.get(str(target))
 
     if not force and up_to_date(context, candidate):
-        entry = context.state.get(str(target))
         ui.ok(f"{target} is up to date ({entry.last_version})")
         return candidate, Path(), None, entry.last_sha256
 
     path = download(context, candidate)
-    digest: str | None = None
+    digest = verify(context, candidate, path, require=require_checksum)
+    info = deb.package_info(path)
+    if download_only:
+        ui.ok(f"downloaded to {path} (not installed)")
+        return candidate, path, info, digest
     try:
-        digest = verify(context, candidate, path, require=require_checksum)
-        if download_only:
-            ui.ok(f"downloaded to {path} (not installed)")
-            return candidate, path, None, digest
-        info = local_install(context, candidate, path, recommend=recommend)
+        local_install(context, candidate, path, info=info, recommend=recommend)
     finally:
-        if not download_only:
-            path.unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
     return candidate, path, info, digest

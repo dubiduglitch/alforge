@@ -35,19 +35,26 @@ class GitLabProvider(Provider):
         return f"https://{self.host}/api/v4/projects/{quote(path, safe='')}{suffix}"
 
     def latest_release(self, path: str) -> Release | None:
-        releases = self.client.get_json(
-            self._api(path, "/releases?per_page=5"), forge=self.name, allow_404=True
+        for entry in self._raw_releases(path, limit=5):
+            return self._to_release(path, entry, with_packages=True)
+        return self._from_packages(path)
+
+    def releases(self, path: str, *, limit: int = 10) -> list[Release]:
+        # Release links only: cheap, and enough to spot a pre-release.
+        return [
+            self._to_release(path, entry, with_packages=False)
+            for entry in self._raw_releases(path, limit=limit)
+        ]
+
+    def _raw_releases(self, path: str, *, limit: int) -> list[dict]:
+        entries = self.client.get_json(
+            self._api(path, f"/releases?per_page={limit}"), forge=self.name, allow_404=True
         )
-        release = None
-        for candidate in releases or []:
-            if candidate.get("upcoming_release"):
-                continue
-            release = candidate
-            break
-        if release is None:
-            return self._from_packages(path)
+        return [entry for entry in entries or [] if not entry.get("upcoming_release")]
+
+    def _to_release(self, path: str, release: dict, *, with_packages: bool) -> Release:
         assets = self._assets_from_release(path, release)
-        if not any(asset.name.endswith(".deb") for asset in assets):
+        if with_packages and not any(asset.name.endswith(".deb") for asset in assets):
             assets += self._assets_from_packages(path)
         return Release(
             forge=self.name,

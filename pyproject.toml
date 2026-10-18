@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alforge"
-version = "0.1.0"
+version = "0.1.1"
 description = "Install and keep up to date .deb packages published on GitHub, GitLab, Codeberg and any Gitea/Forgejo instance."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -64,6 +64,8 @@ def build_row(context, target: Target, *, installed: dict[str, str] | None = Non
 
     if latest is None:
         status = UNKNOWN
+    elif current is None:
+        status = NOT_INSTALLED
     elif is_newer(latest, current):
         status = UPGRADABLE
     else:

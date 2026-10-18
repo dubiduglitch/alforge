@@ -8,7 +8,7 @@ from pathlib import Path
 from .. import deb, installer, ui
 from ..config import Target
 from ..errors import AlforgeError, NotFoundError
-from ..records import record_check, record_install
+from ..records import record_check, record_download, record_install
 from ..report import build_rows, filter_targets, render
 from ..targets import resolve
 
@@ -31,15 +31,22 @@ def cmd_install(context, args) -> int:
         download_only=args.download_only,
         recommend=bool(context.config.setting("install_recommends", True)),
         require_checksum=args.require_checksum,
+        allow_prerelease=args.allow_prerelease,
     )
-    if info is not None:
-        record_install(context, target, plan, package=info.name, version=info.version, digest=digest)
-    else:
+    if info is None:
         record_check(context, target, plan)
+    elif args.download_only:
+        record_download(
+            context, target, plan, package=info.name, version=info.version, digest=digest
+        )
+    else:
+        record_install(
+            context, target, plan, package=info.name, version=info.version, digest=digest
+        )
     if not context.dry_run and context.registry.add(target):
         ui.detail(f"added {target} to the tracking registry")
     context.save_state()
-    if args.download_only:
+    if args.download_only and info is not None:
         ui.ok(f"saved to {artifact}")
     return 0
 
@@ -110,35 +117,31 @@ def cmd_upgrade(context, args) -> int:
     upgraded = 0
     for target in targets:
         try:
-            candidate = installer.plan(context, target, asset_filter=args.asset)
-            if not args.force and installer.up_to_date(context, candidate):
-                entry = context.state.get(str(target))
-                ui.ok(f"{target}: up to date ({entry.last_version})")
-                record_check(context, target, candidate)
-                continue
-            ui.heading(f"{target}: {candidate.release.tag or 'release'}")
+            ui.heading(str(target))
             plan, artifact, info, digest = installer.run(
                 context,
                 target,
                 asset_filter=args.asset,
-                force=True,
+                force=args.force,
                 download_only=args.download_only,
                 recommend=bool(context.config.setting("install_recommends", True)),
                 require_checksum=args.require_checksum,
+                allow_prerelease=args.allow_prerelease,
             )
-            if info is not None:
+            if info is None:
+                record_check(context, target, plan)
+            elif args.download_only:
+                record_download(
+                    context, target, plan, package=info.name, version=info.version, digest=digest
+                )
+            else:
                 record_install(
                     context, target, plan, package=info.name, version=info.version, digest=digest
                 )
                 upgraded += 1
                 ui.ok(f"{target}: installed {info.name} {info.version}")
-            else:
-                record_check(context, target, plan)
-        except Exception as exc:  # noqa: BLE001
-            if ui.is_tty():
-                ui.error(f"{target}: {exc}")
-            else:
-                ui.error(f"{target}: {exc}")
+        except Exception as exc:  # noqa: BLE001 - one bad repo must not stop the rest
+            ui.error(f"{target}: {exc}")
             failed = max(failed, _exit_code(exc))
     context.save_state()
     if upgraded:

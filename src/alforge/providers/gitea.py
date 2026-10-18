@@ -47,6 +47,18 @@ class GiteaProvider(Provider):
             if not entries:
                 return None
             payload = entries[0]
+        return self._to_release(path, payload)
+
+    def releases(self, path: str, *, limit: int = 10) -> list[Release]:
+        host, repo = self._split(path)
+        entries = self.client.get_json(
+            f"https://{host}/api/v1/repos/{repo}/releases?limit={limit}&draft=false",
+            forge="codeberg",
+            allow_404=True,
+        )
+        return [self._to_release(path, entry) for entry in entries or []]
+
+    def _to_release(self, path: str, payload: dict) -> Release:
         assets = tuple(
             Asset(
                 name=asset.get("name", ""),

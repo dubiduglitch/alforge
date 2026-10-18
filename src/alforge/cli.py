@@ -11,7 +11,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, ui
+from . import __version__, lock, ui
 from .commands import local as local_cmds
 from .commands import setup as setup_cmds
 from .commands import sync as sync_cmds
@@ -149,6 +149,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_upgrade.add_argument(
         "--download-only", action="store_true", help="download and verify, do not install"
     )
+    p_upgrade.add_argument(
+        "--allow-prerelease", action="store_true", help="accept a pre-release as the latest one"
+    )
     p_upgrade.add_argument("--notify", action="store_true", help="send a desktop notification")
 
     p_uninstall = subparsers.add_parser("uninstall", help="remove a tracked package")
@@ -188,6 +191,23 @@ _DISPATCH = {
     "purge": local_cmds.cmd_purge,
     "timer": timer_cmds.cmd_timer,
 }
+
+#: Commands that rewrite state or the registry; they take the write lock.
+_WRITE_COMMANDS = frozenset(
+    {
+        "init",
+        "setup",
+        "add",
+        "remove",
+        "install",
+        "update",
+        "check",
+        "upgrade",
+        "uninstall",
+        "purge",
+        "timer",
+    }
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -238,7 +258,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     context = Context.create(dry_run=args.dry_run, offline=args.offline)
+    guarded = args.command in _WRITE_COMMANDS
     try:
+        if guarded:
+            try:
+                with lock.exclusive(wait=ui.is_tty()):
+                    return handler(context, args)
+            except lock.LockBusy:
+                ui.detail("another alforge run is in progress, skipping this one")
+                return 0
         return handler(context, args)
     except AlforgeError as exc:
         if ui.json_mode():

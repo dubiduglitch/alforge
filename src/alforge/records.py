@@ -48,5 +48,32 @@ def record_install(
         entry.last_sha256 = digest
 
 
+def record_download(
+    context,  # noqa: ANN001
+    target: Target,
+    candidate: Plan,
+    *,
+    package: str,
+    version: str,
+    digest: str | None,
+) -> None:
+    """Remember an artifact that was fetched but deliberately not installed.
+
+    The package/version come from the ``.deb`` control archive, so ``list`` can
+    report what is available even though nothing was installed, and the next run
+    finds the artifact already in the cache.
+    """
+    entry = context.state.get(str(target))
+    entry.package = package
+    entry.last_tag = candidate.release.tag
+    entry.last_asset = candidate.asset.name
+    entry.last_asset_url = candidate.asset.url
+    entry.last_version = version
+    entry.installed_version = deb.installed_version(package)
+    entry.checked_at = _now()
+    if digest:
+        entry.last_sha256 = digest
+
+
 def forget(context, target: Target) -> None:  # noqa: ANN001
     context.state.drop(str(target))

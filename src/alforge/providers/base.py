@@ -71,6 +71,23 @@ class Provider(abc.ABC):
     def latest_release(self, path: str) -> Release | None:
         """Latest stable release of ``path``, or None when there is none."""
 
+    def releases(self, path: str, *, limit: int = 10) -> list[Release]:
+        """Recent releases, newest first.
+
+        Only needed to skip a pre-release and fall back to the newest stable
+        one, so the default of "just the latest" is enough for a forge that
+        cannot list releases cheaply.
+        """
+        latest = self.latest_release(path)
+        return [latest] if latest is not None else []
+
+    def latest_stable_release(self, path: str, *, limit: int = 20) -> Release | None:
+        """Newest release that is not flagged as a pre-release."""
+        for release in self.releases(path, limit=limit):
+            if not release.prerelease:
+                return release
+        return None
+
     @abc.abstractmethod
     def search(self, query: str, *, limit: int = 8) -> list[SearchResult]:
         """Search repositories by free text."""

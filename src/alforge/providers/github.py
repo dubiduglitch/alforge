@@ -31,6 +31,13 @@ class GitHubProvider(Provider):
             payload = entries[0]
         return self._to_release(path, payload)
 
+    def releases(self, path: str, *, limit: int = 10) -> list[Release]:
+        self._validate(path)
+        entries = self.client.get_json(
+            f"{API}/repos/{path}/releases?per_page={limit}", forge=self.name, allow_404=True
+        )
+        return [self._to_release(path, entry) for entry in entries or []]
+
     def _to_release(self, path: str, payload: dict) -> Release:
         assets = tuple(
             Asset(

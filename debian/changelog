@@ -1,3 +1,16 @@
+alforge (0.1.1-1) unstable; urgency=medium
+
+  * Follow the newest stable release: a pre-release is skipped in favour of the
+    latest stable one, with a new --allow-prerelease flag to opt into betas.
+  * Reuse a previously verified artifact from the download cache instead of
+    re-downloading it on every --download-only run or download-mode timer tick.
+  * Take a per-user write lock so a timer run and a manual upgrade cannot
+    interleave and clobber the registry or state.
+  * Report "not installed" together with the available version after a
+    download-only run.
+
+ -- dubiduglitch <dubiduglitch@users.noreply.github.com>  Sun, 18 Oct 2026 00:50:00 +0000
+
 alforge (0.1.0-1) unstable; urgency=medium
 
   * Initial Debian packaging.

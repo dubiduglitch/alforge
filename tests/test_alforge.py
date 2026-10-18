@@ -10,6 +10,7 @@ neither does its test suite.  Run it either way::
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -18,11 +19,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from alforge import assets, checksum, deb, http, installer, report, versions
+from alforge import assets, checksum, deb, http, installer, lock, report, ui, versions
 from alforge.config import Target, parse_target, short_name_matches
 from alforge.errors import AlforgeError, AmbiguousError, ChecksumError, NetworkError, NotFoundError
-from alforge.providers import Asset
+from alforge.providers import Asset, Release
 from alforge.state import EntryState, State
+
+_XDG_NAMES = ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
 
 
 class VersionsTest(unittest.TestCase):
@@ -255,6 +258,168 @@ class TargetTest(unittest.TestCase):
         self.assertTrue(short_name_matches(target, "super-productivity"))
         self.assertTrue(short_name_matches(target, "owner/super-productivity"))
         self.assertFalse(short_name_matches(target, "something-else"))
+
+
+# --------------------------------------------------------------------------- #
+# test doubles for the pipeline
+# --------------------------------------------------------------------------- #
+def _release(tag: str, *, prerelease: bool = False, assets=()) -> Release:
+    return Release(forge="github", repo="a/b", tag=tag, prerelease=prerelease, assets=tuple(assets))
+
+
+def _deb_asset(
+    name: str = "app_1.0_amd64.deb", *, size: int | None = 10, ident: str | None = None
+) -> Asset:
+    return Asset(name=name, url=f"https://example.invalid/{name}", size=size, id=ident)
+
+
+class _FakeProvider:
+    """Minimal provider double exposing the latest and latest-stable release."""
+
+    def __init__(self, latest: Release | None, stable: Release | None) -> None:
+        self._latest = latest
+        self._stable = stable
+        self.stable_calls = 0
+
+    def latest_release(self, path: str) -> Release | None:
+        return self._latest
+
+    def latest_stable_release(self, path: str, *, limit: int = 20) -> Release | None:
+        self.stable_calls += 1
+        return self._stable
+
+
+class _FakePlanContext:
+    offline = False
+
+    def __init__(self, provider: _FakeProvider) -> None:
+        self._provider = provider
+
+    def provider(self, forge: str) -> _FakeProvider:
+        return self._provider
+
+    def asset_exclude(self) -> tuple[str, ...]:
+        return ()
+
+
+class PrereleaseTest(unittest.TestCase):
+    def setUp(self) -> None:
+        ui.configure(quiet=True, json_output=False, color=False)
+
+    def _provider(self) -> _FakeProvider:
+        asset = _deb_asset()
+        return _FakeProvider(
+            latest=_release("v2.0.0-beta", prerelease=True, assets=[asset]),
+            stable=_release("v1.9.0", assets=[asset]),
+        )
+
+    def test_falls_back_to_newest_stable(self):
+        provider = self._provider()
+        chosen = installer.plan(_FakePlanContext(provider), Target("github", "a/b"))
+        self.assertEqual(chosen.release.tag, "v1.9.0")
+        self.assertEqual(provider.stable_calls, 1)
+
+    def test_allow_prerelease_keeps_the_beta(self):
+        provider = self._provider()
+        chosen = installer.plan(
+            _FakePlanContext(provider), Target("github", "a/b"), allow_prerelease=True
+        )
+        self.assertEqual(chosen.release.tag, "v2.0.0-beta")
+        self.assertEqual(provider.stable_calls, 0)
+
+    def test_prerelease_is_used_when_nothing_is_stable(self):
+        asset = _deb_asset()
+        provider = _FakeProvider(
+            latest=_release("v2.0.0-beta", prerelease=True, assets=[asset]), stable=None
+        )
+        chosen = installer.plan(_FakePlanContext(provider), Target("github", "a/b"))
+        self.assertEqual(chosen.release.tag, "v2.0.0-beta")
+
+
+class _FakeClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def download(self, url, writer, *, forge=None):  # noqa: ANN001
+        self.calls += 1
+        writer(b"data")
+        return 4
+
+
+class _FakeDownloadContext:
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self.client = _FakeClient()
+
+    def download_dir(self) -> Path:
+        self._directory.mkdir(parents=True, exist_ok=True)
+        return self._directory
+
+
+class DownloadCacheTest(unittest.TestCase):
+    def setUp(self) -> None:
+        ui.configure(quiet=True, json_output=False, color=False)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _candidate(self) -> installer.Plan:
+        asset = _deb_asset(ident="42")
+        return installer.Plan(
+            target=Target("github", "a/b"),
+            release=_release("v1.0.0", assets=[asset]),
+            asset=asset,
+        )
+
+    def test_second_download_reuses_the_cache(self):
+        context = _FakeDownloadContext(Path(self.tmp.name))
+        candidate = self._candidate()
+        first = installer.download(context, candidate)
+        self.assertEqual(context.client.calls, 1)
+        second = installer.download(context, candidate)
+        self.assertEqual(context.client.calls, 1)
+        self.assertEqual(first, second)
+
+    def test_cached_path_is_deterministic_and_flat(self):
+        context = _FakeDownloadContext(Path(self.tmp.name))
+        candidate = self._candidate()
+        path = installer.cached_path(context, candidate)
+        self.assertEqual(path, installer.cached_path(context, candidate))
+        self.assertNotIn("/", path.name)
+        self.assertTrue(path.name.endswith("--42.deb"))
+
+    def test_downloaded_file_is_private(self):
+        context = _FakeDownloadContext(Path(self.tmp.name))
+        path = installer.download(context, self._candidate())
+        self.assertEqual(path.stat().st_mode & 0o077, 0)
+
+
+class LockTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self._saved = {name: os.environ.get(name) for name in _XDG_NAMES}
+        for name in _XDG_NAMES:
+            os.environ[name] = self.tmp.name
+        self.addCleanup(self._restore)
+
+    def _restore(self) -> None:
+        for name, value in self._saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    def test_lock_is_exclusive(self):
+        with lock.exclusive(wait=False):
+            with self.assertRaises(lock.LockBusy):
+                with lock.exclusive(wait=False):
+                    pass
+
+    def test_lock_is_released_after_the_block(self):
+        with lock.exclusive(wait=False):
+            pass
+        with lock.exclusive(wait=False):
+            pass
 
 
 if __name__ == "__main__":
