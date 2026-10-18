@@ -1,9 +1,9 @@
-"""``gitget timer`` - wiring the set-and-forget automation.
+"""``alforge timer`` - wiring the set-and-forget automation.
 
 systemd *user* units, not system ones: the registry, the tokens and the state
 all live in ``$HOME``, and a root service cannot see them.  A user timer also
 avoids giving a background job unrestricted root access: privilege is used only
-for the single ``apt-get`` call inside ``gitget upgrade``.
+for the single ``apt-get`` call inside ``alforge upgrade``.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ from pathlib import Path
 
 from .. import deb, ui
 from ..config import Config
-from ..errors import GitgetError
+from ..errors import AlforgeError
 
-SERVICE_NAME = "gitget-upgrade.service"
-TIMER_NAME = "gitget-upgrade.timer"
+SERVICE_NAME = "alforge-upgrade.service"
+TIMER_NAME = "alforge-upgrade.timer"
 DEFAULT_SCHEDULE = "daily"
 DEFAULT_DELAY = "45m"
 
@@ -31,24 +31,24 @@ def unit_dir() -> Path:
 
 
 def exec_start() -> str:
-    """Absolute command that re-invokes gitget, whatever way it was installed."""
+    """Absolute command that re-invokes alforge, whatever way it was installed."""
     import os
 
-    argv0 = Path(sys.argv[0] or "gitget")
+    argv0 = Path(sys.argv[0] or "alforge")
     candidate = argv0.resolve()
-    if candidate.name == "gitget" and candidate.is_file() and os.access(candidate, os.X_OK):
+    if candidate.name == "alforge" and candidate.is_file() and os.access(candidate, os.X_OK):
         return str(candidate)
-    found = shutil.which("gitget")
+    found = shutil.which("alforge")
     if found:
         return found
-    return f"{sys.executable} -m gitget"
+    return f"{sys.executable} -m alforge"
 
 
 def render_service(command: str, *, mode: str) -> str:
     lines = [
         "[Unit]",
-        "Description=gitget - keep .deb packages published on git forges up to date",
-        "Documentation=man:gitget(1)",
+        "Description=alforge - keep .deb packages published on git forges up to date",
+        "Documentation=man:alforge(1)",
         "After=network-online.target",
         "Wants=network-online.target",
         "",
@@ -60,13 +60,13 @@ def render_service(command: str, *, mode: str) -> str:
         notify = shutil.which("notify-send")
         if notify:
             lines.append(
-                f"ExecStartPost=-{notify} -a gitget gitget "
-                "'Updates downloaded - run gitget upgrade to install'"
+                f"ExecStartPost=-{notify} -a alforge alforge "
+                "'Updates downloaded - run alforge upgrade to install'"
             )
     else:
         lines.append(f"ExecStart={command} upgrade --yes --quiet")
     lines += [
-        "# gitget only needs privilege for the final apt-get call.",
+        "# alforge only needs privilege for the final apt-get call.",
         "Nice=10",
         "IOSchedulingClass=idle",
         "",
@@ -81,7 +81,7 @@ def render_timer(schedule: str, delay: str) -> str:
     return "\n".join(
         [
             "[Unit]",
-            "Description=gitget automatic upgrade timer",
+            "Description=alforge automatic upgrade timer",
             "",
             "[Timer]",
             f"OnCalendar={schedule}",
@@ -97,7 +97,7 @@ def render_timer(schedule: str, delay: str) -> str:
 
 def _systemctl(*arguments: str, check: bool = False) -> subprocess.CompletedProcess:
     if not shutil.which("systemctl"):
-        raise GitgetError(
+        raise AlforgeError(
             "systemctl was not found",
             hint="this command requires a systemd user session",
         )
@@ -105,7 +105,7 @@ def _systemctl(*arguments: str, check: bool = False) -> subprocess.CompletedProc
         ["systemctl", "--user", *arguments], check=False, capture_output=True, text=True
     )
     if check and result.returncode != 0:
-        raise GitgetError(
+        raise AlforgeError(
             f"systemctl --user {' '.join(arguments)} failed",
             hint=(result.stderr or result.stdout).strip() or None,
         )
@@ -141,7 +141,7 @@ def cmd_timer(context, args) -> int:  # noqa: ANN001
                 path.unlink()
                 ui.ok(f"removed {path}")
         _systemctl("daemon-reload")
-        ui.ok("gitget automatic upgrades disabled")
+        ui.ok("alforge automatic upgrades disabled")
         return 0
 
     # install
@@ -169,7 +169,7 @@ def cmd_timer(context, args) -> int:  # noqa: ANN001
             "the timer runs without a terminal: apt-get will fail if sudo asks for a password"
         )
         ui.detail("options: configure passwordless sudo for apt-get, or re-run with")
-        ui.detail("'gitget timer install --mode download' to only fetch packages")
+        ui.detail("'alforge timer install --mode download' to only fetch packages")
 
     if not _linger_enabled():
         ui.warn("your user session stops at logout, so the timer will not run while logged out")

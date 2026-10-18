@@ -29,7 +29,7 @@ def cmd_uninstall(context, args) -> int:
         if context.dry_run:
             ui.info("would run: " + " ".join(command))
         else:
-            ui.ok(f"removed {package} (still tracked, use 'gitget remove {name}' to stop tracking)")
+            ui.ok(f"removed {package} (still tracked, use 'alforge remove {name}' to stop tracking)")
     return 1 if failures else 0
 
 

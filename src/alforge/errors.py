@@ -1,13 +1,13 @@
 """Error hierarchy and exit codes.
 
 Exit codes are part of the public interface: scripts and systemd units rely on
-them.  They are documented in ``docs/exit-codes.md`` and in ``gitget help``.
+them.  They are documented in ``docs/exit-codes.md`` and in ``alforge help``.
 """
 
 from __future__ import annotations
 
 
-class GitgetError(Exception):
+class AlforgeError(Exception):
     """Base class for every expected, user-facing failure."""
 
     exit_code = 1
@@ -18,25 +18,25 @@ class GitgetError(Exception):
         self.hint = hint
 
 
-class UsageError(GitgetError):
+class UsageError(AlforgeError):
     """Bad command line usage."""
 
     exit_code = 2
 
 
-class NetworkError(GitgetError):
+class NetworkError(AlforgeError):
     """Network failure, or a forge API answered with an unexpected status."""
 
     exit_code = 3
 
 
-class NotFoundError(GitgetError):
+class NotFoundError(AlforgeError):
     """A repository, release or asset could not be found."""
 
     exit_code = 4
 
 
-class AmbiguousError(GitgetError):
+class AmbiguousError(AlforgeError):
     """Several candidates match and we cannot ask the user (headless mode)."""
 
     exit_code = 5
@@ -47,19 +47,19 @@ class AmbiguousError(GitgetError):
         self.candidates = candidates
 
 
-class ChecksumError(GitgetError):
+class ChecksumError(AlforgeError):
     """A downloaded artifact does not match its published checksum."""
 
     exit_code = 6
 
 
-class PrivilegeError(GitgetError):
+class PrivilegeError(AlforgeError):
     """We need root and cannot obtain it non-interactively."""
 
     exit_code = 7
 
 
-class ConfigError(GitgetError):
+class ConfigError(AlforgeError):
     """Configuration or registry file is malformed."""
 
     exit_code = 8

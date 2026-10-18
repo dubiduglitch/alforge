@@ -1,6 +1,6 @@
 """HTTP client with per-forge authentication, retries and rate-limit reporting.
 
-Only the standard library is used, so gitget installs with ``pipx`` and a
+Only the standard library is used, so alforge installs with ``pipx`` and a
 single ``.deb`` without pulling dependencies.
 """
 
@@ -17,9 +17,42 @@ from typing import Any, Callable
 from . import __version__
 from .errors import NetworkError, NotFoundError
 
-USER_AGENT = f"gitget/{__version__} (+https://github.com/rsxn/gitget)"
+USER_AGENT = f"alforge/{__version__} (+https://github.com/dubiduglitch/alforge)"
 DEFAULT_TIMEOUT = 30.0
 RETRY_STATUSES = {500, 502, 503, 504}
+
+#: Request headers that must never follow a redirect to another host.
+_SECRET_HEADERS = ("authorization", "private-token")
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects without leaking forge credentials to other hosts.
+
+    ``urllib`` copies *every* request header onto the redirected request, so a
+    release download that bounces to a CDN (as GitHub does) would hand the API
+    token to the CDN — or to any host a compromised forge pointed us at.  We
+    drop the auth headers whenever the redirect leaves the original host.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is None:
+            return None
+        old_host = urllib.parse.urlsplit(req.full_url).hostname
+        new_host = urllib.parse.urlsplit(newurl).hostname
+        if old_host != new_host:
+            for store in (new.headers, new.unredirected_hdrs):
+                for key in list(store):
+                    if key.lower() in _SECRET_HEADERS:
+                        del store[key]
+        return new
+
+
+def _check_download_url(url: str) -> None:
+    """Only plain HTTP(S) artifact URLs are ever fetched."""
+    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise NetworkError(f"refusing to download from a {scheme or 'relative'} URL")
 
 
 @dataclass
@@ -46,6 +79,7 @@ class HttpClient:
         self.tokens = tokens or {}
         self.timeout = timeout
         self.retries = retries
+        self._opener = urllib.request.build_opener(_SafeRedirectHandler)
 
     # -- headers ---------------------------------------------------------- #
     def headers_for(self, forge: str | None, accept: str | None = None) -> dict[str, str]:
@@ -78,7 +112,7 @@ class HttpClient:
         for attempt in range(self.retries + 1):
             request = urllib.request.Request(url, headers=self.headers_for(forge, accept))
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                with self._opener.open(request, timeout=self.timeout) as response:
                     return Response(
                         status=response.status,
                         body=response.read(),
@@ -123,10 +157,11 @@ class HttpClient:
 
     def download(self, url: str, writer: Callable[[bytes], None], *, forge: str | None = None) -> int:
         """Stream a (possibly large) artifact to ``writer``. Returns byte count."""
+        _check_download_url(url)
         request = urllib.request.Request(url, headers=self.headers_for(forge, accept="application/octet-stream"))
         total = 0
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with self._opener.open(request, timeout=self.timeout) as response:
                 while True:
                     chunk = response.read(64 * 1024)
                     if not chunk:
@@ -148,5 +183,5 @@ class HttpClient:
         if remaining == "0" and reset and reset.isdigit():
             delta = max(0, int(reset) - int(time.time()))
             hint_parts.append(f"rate limit resets in {delta // 60} min")
-        hint_parts.append("run 'gitget setup' to add an API token and raise the limit")
+        hint_parts.append("run 'alforge setup' to add an API token and raise the limit")
         return NetworkError(message, hint="; ".join(hint_parts))

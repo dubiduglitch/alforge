@@ -35,19 +35,23 @@ def _normalise(value: str) -> str:
 
 
 def guess_package(target: Target, installed: dict[str, str]) -> str | None:
-    """Best effort mapping from a repository name to an installed package."""
+    """Best effort mapping from a repository name to an installed package.
+
+    Only exact matches and *distinctive* prefixes are accepted: a short name
+    such as ``r`` must never be paired with ``adduser``.
+    """
     if target.name in installed:
         return target.name
     wanted = _normalise(target.name)
+    if not wanted:
+        return None
     for name in installed:
         if _normalise(name) == wanted:
             return name
-        # also match when package contains repo name
-        if wanted in _normalise(name):
-            return name
-    for name in installed:
-        if wanted and _normalise(name).startswith(wanted):
-            return name
+    if len(wanted) >= 4:
+        for name in installed:
+            if _normalise(name).startswith(wanted):
+                return name
     return None
 
 
@@ -88,13 +92,13 @@ def render(rows: list[Row]) -> None:
         ui.emit_json([row.as_dict() for row in rows])
         return
     if not rows:
-        ui.info("no tracked repositories yet, add one with 'gitget add owner/repo'")
+        ui.info("no tracked repositories yet, add one with 'alforge add owner/repo'")
         return
     labels = {
         UP_TO_DATE: "up to date",
         UPGRADABLE: "upgrade available",
         NOT_INSTALLED: "not installed",
-        UNKNOWN: "unknown (run gitget update)",
+        UNKNOWN: "unknown (run alforge update)",
     }
     ui.table(
         ["TARGET", "PACKAGE", "INSTALLED", "AVAILABLE", "STATUS"],
@@ -105,7 +109,7 @@ def render(rows: list[Row]) -> None:
     )
     upgradable = sum(1 for row in rows if row.status == UPGRADABLE)
     if upgradable:
-        ui.info(f"{upgradable} package(s) can be upgraded: run 'gitget upgrade'")
+        ui.info(f"{upgradable} package(s) can be upgraded: run 'alforge upgrade'")
 
 
 def select_target(context, name: str) -> Target:  # noqa: ANN001

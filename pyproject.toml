@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gitget"
+name = "alforge"
 version = "0.1.0"
 description = "Install and keep up to date .deb packages published on GitHub, GitLab, Codeberg and any Gitea/Forgejo instance."
 readme = "README.md"
@@ -22,10 +22,10 @@ classifiers = [
 dependencies = []
 
 [project.scripts]
-gitget = "gitget.cli:main"
+alforge = "alforge.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/dubiduglitch/gitget"
+Homepage = "https://github.com/dubiduglitch/alforge"
 
 [tool.setuptools.packages.find]
 where = ["src"]

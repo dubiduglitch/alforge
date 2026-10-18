@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: gitget
-Source: https://github.com/dubiduglitch/gitget
+Upstream-Name: alforge
+Source: https://github.com/dubiduglitch/alforge
 
 Files: *
 Copyright: 2026 dubiduglitch

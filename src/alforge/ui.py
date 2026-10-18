@@ -2,7 +2,7 @@
 
 Every message goes through this module so that ``--quiet``, ``--json`` and
 colour handling stay consistent, and so that background runs leave a usable
-trail in ``~/.local/state/gitget/gitget.log``.
+trail in ``~/.local/state/alforge/alforge.log``.
 """
 
 from __future__ import annotations

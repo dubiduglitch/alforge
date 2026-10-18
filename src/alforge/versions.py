@@ -1,6 +1,6 @@
 """Version handling.
 
-gitget never guesses a version from a git tag: the authoritative version is the
+alforge never guesses a version from a git tag: the authoritative version is the
 ``Version`` field inside the ``.deb`` control archive.  Tags are only used to
 decide whether a release *changed*.
 

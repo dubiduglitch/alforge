@@ -11,7 +11,7 @@ Accepted forms::
     obsidian                     free text -> forge search
 
 Short names are only resolved interactively.  In a systemd unit there is no
-terminal, so gitget fails loudly instead of picking a random repository.
+terminal, so alforge fails loudly instead of picking a random repository.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def resolve(
     if not results:
         raise NotFoundError(
             f"no repository matching {value!r} on {chosen_forge}",
-            hint="try 'gitget install owner/repo' instead",
+            hint="try 'alforge install owner/repo' instead",
         )
     if len(results) == 1:
         result = results[0]
@@ -81,7 +81,7 @@ def resolve(
         raise AmbiguousError(
             f"{len(results)} repositories match {value!r}",
             candidates=[result.target for result in results],
-            hint="be explicit, for example 'gitget install owner/repo'",
+            hint="be explicit, for example 'alforge install owner/repo'",
         )
     pick = (picker or _interactive_picker)(results)
     if pick is None:

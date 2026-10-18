@@ -9,7 +9,7 @@ problem rather than a ``grep``:
 * naming that resembles the repository is preferred.
 
 When two candidates tie on the top score the caller decides: interactively the
-user picks, otherwise gitget refuses to guess (``AmbiguousError``) instead of
+user picks, otherwise alforge refuses to guess (``AmbiguousError``) instead of
 silently installing the wrong architecture.
 """
 

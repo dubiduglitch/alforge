@@ -13,7 +13,7 @@ from .. import __version__, deb, paths, ui
 from ..config import SUPPORTED_FORGES, Registry, insecure_permissions
 
 REGISTRY_HEADER = """\
-# gitget tracking registry - one target per line.
+# alforge tracking registry - one target per line.
 # format: [forge:]path
 #   github:owner/repo
 #   gitlab:group/project
@@ -21,7 +21,7 @@ REGISTRY_HEADER = """\
 #   gitea:git.example.org/owner/repo
 #
 # Learned data (debian package name, last seen version) lives in
-# ~/.local/state/gitget/state.json and is never written here.
+# ~/.local/state/alforge/state.json and is never written here.
 """
 
 
@@ -53,7 +53,7 @@ def cmd_init(context, args) -> int:  # noqa: ANN001
     if getattr(args, "no_prompt", False) or not ui.is_tty():
         return 0
     if context.config.tokens:
-        ui.detail("API tokens already configured, run 'gitget setup' to change them")
+        ui.detail("API tokens already configured, run 'alforge setup' to change them")
         return 0
     if ui.confirm("Configure a forge API token now? Highly recommended.", default=True):
         return cmd_setup(context, args)
@@ -81,7 +81,7 @@ def cmd_setup(context, args) -> int:  # noqa: ANN001
 
     if getattr(args, "show", False):
         if not context.config.tokens:
-            ui.info("no token configured: gitget runs unauthenticated (60 requests/hour)")
+            ui.info("no token configured: alforge runs unauthenticated (60 requests/hour)")
             return 0
         for forge in SUPPORTED_FORGES:
             token = context.config.token(forge)
@@ -114,7 +114,7 @@ def cmd_setup(context, args) -> int:  # noqa: ANN001
 
     if not assignments and not getattr(args, "clear", None):
         if not ui.is_tty():
-            ui.error("'gitget setup' needs a terminal, or use --token FORGE=TOKEN")
+            ui.error("'alforge setup' needs a terminal, or use --token FORGE=TOKEN")
             return 2
         ui.heading("Forge API tokens")
         ui.info("A token lifts GitHub's limit from 60 to 5000 requests/hour.")
@@ -177,7 +177,7 @@ def _linger_enabled() -> bool | None:
 
 
 def cmd_doctor(context, args) -> int:  # noqa: ANN001
-    ui.heading(f"gitget {__version__} on {platform.platform()}")
+    ui.heading(f"alforge {__version__} on {platform.platform()}")
     ui.heading("Environment")
     _check("python", sys.version_info >= (3, 11), platform.python_version())
     _check("dpkg", shutil.which("dpkg") is not None)
@@ -201,7 +201,7 @@ def cmd_doctor(context, args) -> int:  # noqa: ANN001
         if context.config.token(forge):
             ui.ok(f"{forge} token: configured")
     if not context.config.tokens:
-        ui.warn("no API token: 60 requests/hour, 'gitget setup' raises it to 5000")
+        ui.warn("no API token: 60 requests/hour, 'alforge setup' raises it to 5000")
 
     ui.heading("Tracking")
     targets = context.registry.targets
@@ -212,12 +212,12 @@ def cmd_doctor(context, args) -> int:  # noqa: ANN001
     systemd = _check("systemd --user", _systemd_user_available())
     if systemd:
         result = subprocess.run(
-            ["systemctl", "--user", "is-active", "gitget-upgrade.timer"],
+            ["systemctl", "--user", "is-active", "alforge-upgrade.timer"],
             check=False,
             capture_output=True,
             text=True,
         )
-        _check("gitget-upgrade.timer", result.stdout.strip() == "active", result.stdout.strip())
+        _check("alforge-upgrade.timer", result.stdout.strip() == "active", result.stdout.strip())
         linger = _linger_enabled()
         if linger is None:
             ui.warn("cannot read the linger state, see 'loginctl enable-linger'")
@@ -236,7 +236,7 @@ def cmd_doctor(context, args) -> int:  # noqa: ANN001
 
 
 def ensure_registry_placeholder() -> None:
-    """Used by tests and by ``gitget init`` reruns."""
+    """Used by tests and by ``alforge init`` reruns."""
     registry = Registry()
     if not registry.path.exists():
         registry.path.parent.mkdir(parents=True, exist_ok=True)

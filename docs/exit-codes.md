@@ -3,7 +3,7 @@
 | Code | Meaning |
 |---|---|
 | 0 | Success. Command completed without error. |
-| 1 | General failure. Check the error message and `~/.local/state/gitget/gitget.log`. |
+| 1 | General failure. Check the error message and `~/.local/state/alforge/alforge.log`. |
 | 2 | Bad usage. Invalid command line arguments or missing target. |
 | 3 | Network or API failure. Cannot reach the forge, or it answered unexpectedly. |
 | 4 | Not found. Repository, release or asset could not be found. |

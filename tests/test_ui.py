@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from gitget import ui
+from alforge import ui
 
 
 def test_configure():

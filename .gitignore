@@ -7,8 +7,8 @@ dist/
 .pytest_cache/
 .pybuild/
 debian/files
-debian/gitget/
+debian/alforge/
 debian/.debhelper/
 debian/debhelper-build-stamp
-debian/gitget.substvars
+debian/alforge.substvars
 *.debhelper.log

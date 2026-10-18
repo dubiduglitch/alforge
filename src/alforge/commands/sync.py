@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .. import deb, installer, ui
 from ..config import Target
-from ..errors import GitgetError, NotFoundError
+from ..errors import AlforgeError, NotFoundError
 from ..records import record_check, record_install
 from ..report import build_rows, filter_targets, render
 from ..targets import resolve
@@ -74,13 +74,13 @@ def _install_direct(context, url: str) -> int:
 def cmd_update(context, args) -> int:
     """Refresh what the forges publish, like ``apt update``."""
     if context.offline:
-        raise GitgetError(
-            "'gitget update' needs network access",
-            hint="drop --offline; use 'gitget list' to see cached information",
+        raise AlforgeError(
+            "'alforge update' needs network access",
+            hint="drop --offline; use 'alforge list' to see cached information",
         )
     targets = filter_targets(context, getattr(args, "specs", None) or None)
     if not targets:
-        ui.info("nothing tracked yet: 'gitget add owner/repo'")
+        ui.info("nothing tracked yet: 'alforge add owner/repo'")
         return 0
 
     failed = 0
@@ -103,7 +103,7 @@ def cmd_upgrade(context, args) -> int:
     """Install newer versions of tracked packages."""
     targets = filter_targets(context, getattr(args, "specs", None) or None)
     if not targets:
-        ui.info("nothing tracked yet: 'gitget add owner/repo'")
+        ui.info("nothing tracked yet: 'alforge add owner/repo'")
         return 0
 
     failed = 0
@@ -156,13 +156,13 @@ def _notify(upgraded: int) -> None:
     if not notify_send:
         return
     if upgraded:
-        summary = f"gitget upgraded {upgraded} package(s)"
+        summary = f"alforge upgraded {upgraded} package(s)"
     else:
-        summary = "gitget: everything is up to date"
+        summary = "alforge: everything is up to date"
     environment = dict(os.environ)
     try:
         subprocess.run(
-            [notify_send, "-a", "gitget", "gitget", summary],
+            [notify_send, "-a", "alforge", "alforge", summary],
             check=False,
             env=environment,
             timeout=10,

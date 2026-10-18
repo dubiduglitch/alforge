@@ -1,6 +1,6 @@
 """Thin, explicit wrappers around dpkg/apt.
 
-gitget deliberately shells out instead of reimplementing package handling.
+alforge deliberately shells out instead of reimplementing package handling.
 Anything privileged goes through here so it is easy to audit.
 """
 
@@ -8,12 +8,18 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .errors import GitgetError, PrivilegeError
+from .errors import AlforgeError, PrivilegeError
+
+#: Debian policy: at least two characters, lowercase letters, digits, ``+``,
+#: ``-`` and ``.``, starting with an alphanumeric.  Anything else is refused
+#: before it can reach ``apt-get``.
+PACKAGE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]+$")
 
 ARCH_ALIASES: dict[str, tuple[str, ...]] = {
     "amd64": ("amd64", "x86_64", "x64", "linux-amd64", "linux-x64"),
@@ -31,9 +37,9 @@ def _run(command: list[str], *, check: bool = True, capture: bool = True) -> sub
             command, check=check, capture_output=capture, text=True
         )
     except FileNotFoundError as exc:
-        raise GitgetError(f"required command not found: {command[0]}") from exc
+        raise AlforgeError(f"required command not found: {command[0]}") from exc
     except subprocess.CalledProcessError as exc:
-        raise GitgetError(
+        raise AlforgeError(
             f"{' '.join(command)} failed ({exc.returncode})",
             hint=(exc.stderr or "").strip() or None,
         ) from exc
@@ -75,7 +81,7 @@ def read_control(path: Path) -> dict[str, str]:
     """Read the control file of a .deb without installing it."""
     result = _run(["dpkg-deb", "-f", str(path)], check=False)
     if result.returncode != 0:
-        raise GitgetError(f"{path} is not a readable .deb package")
+        raise AlforgeError(f"{path} is not a readable .deb package")
     fields: dict[str, str] = {}
     current: str | None = None
     for line in result.stdout.splitlines():
@@ -90,16 +96,26 @@ def read_control(path: Path) -> dict[str, str]:
     return fields
 
 
+def validate_package_name(name: str) -> str:
+    """Refuse a package name before it can be passed to ``apt-get``/``dpkg``."""
+    if not PACKAGE_NAME_RE.match(name):
+        raise AlforgeError(
+            f"refusing suspicious package name {name!r}",
+            hint="the .deb control file does not look like a Debian package",
+        )
+    return name
+
+
 def package_info(path: Path) -> PackageInfo:
     fields = read_control(path)
     missing = [key for key in ("Package", "Version", "Architecture") if key not in fields]
     if missing:
-        raise GitgetError(
+        raise AlforgeError(
             f"{path.name} is missing control field(s): {', '.join(missing)}",
             hint="this release asset does not look like a Debian binary package",
         )
     return PackageInfo(
-        name=fields["Package"],
+        name=validate_package_name(fields["Package"]),
         version=fields["Version"],
         architecture=fields["Architecture"],
     )
@@ -181,11 +197,11 @@ def install_local(
             raise PrivilegeError(
                 "apt-get failed and sudo is not available without a password",
                 hint=(
-                    "run gitget interactively, or allow passwordless sudo for apt-get, "
-                    "or use 'gitget upgrade --download-only' from the timer"
+                    "run alforge interactively, or allow passwordless sudo for apt-get, "
+                    "or use 'alforge upgrade --download-only' from the timer"
                 ),
             ) from exc
-        raise GitgetError(f"apt-get failed with exit code {exc.returncode}") from exc
+        raise AlforgeError(f"apt-get failed with exit code {exc.returncode}") from exc
     return full
 
 
@@ -197,7 +213,7 @@ def _sudo_is_usable() -> bool:
 
 
 def sudo_usable() -> bool:
-    """Public helper used by ``gitget doctor``."""
+    """Public helper used by ``alforge doctor``."""
     return _sudo_is_usable()
 
 
@@ -214,5 +230,5 @@ def remove_package(package: str, *, purge: bool = False, dry_run: bool = False) 
     try:
         subprocess.run(full, check=True, env=environment)
     except subprocess.CalledProcessError as exc:
-        raise GitgetError(f"apt-get remove failed with exit code {exc.returncode}") from exc
+        raise AlforgeError(f"apt-get remove failed with exit code {exc.returncode}") from exc
     return full

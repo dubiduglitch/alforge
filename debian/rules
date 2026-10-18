@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-export PYBUILD_NAME=gitget
+export PYBUILD_NAME=alforge
 export PYBUILD_SYSTEM=pyproject
 
 %:

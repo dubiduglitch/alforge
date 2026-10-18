@@ -40,8 +40,8 @@ def cmd_remove(context, args) -> int:
             if entry.package:
                 ui.detail(
                     f"{entry.package} is still installed; "
-                    f"use 'gitget uninstall {entry.package}' to remove it, "
-                    f"or 'gitget purge {target.name}' for both"
+                    f"use 'alforge uninstall {entry.package}' to remove it, "
+                    f"or 'alforge purge {target.name}' for both"
                 )
         else:
             ui.warn(f"{target} was not tracked")

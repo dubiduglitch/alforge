@@ -15,7 +15,7 @@ from pathlib import Path
 from . import assets as asset_selection
 from . import checksum, deb, ui
 from .config import Target
-from .errors import ChecksumError, GitgetError, NotFoundError, UsageError
+from .errors import ChecksumError, AlforgeError, NotFoundError, UsageError
 from .providers import Asset, Release
 
 
@@ -71,7 +71,7 @@ def plan(
     if context.offline:
         raise UsageError(
             f"cannot resolve {target} in offline mode",
-            hint="cached information is available through 'gitget list'",
+            hint="cached information is available through 'alforge list'",
         )
     provider = context.provider(target.forge)
     release = provider.latest_release(target.path)
@@ -112,7 +112,7 @@ def up_to_date(context, candidate: Plan) -> bool:  # noqa: ANN001 - Context
     """Cheap check: has anything changed since the last successful upgrade?
 
     No download is involved.  A package that was removed by hand counts as out
-    of date, so ``gitget upgrade`` reinstalls it, which is what people expect
+    of date, so ``alforge upgrade`` reinstalls it, which is what people expect
     from a tool that tracks a release.
     """
     entry = context.state.get(str(candidate.target))
@@ -136,7 +136,7 @@ def up_to_date(context, candidate: Plan) -> bool:  # noqa: ANN001 - Context
 # --------------------------------------------------------------------------- #
 def download(context, candidate: Plan) -> Path:  # noqa: ANN001 - Context
     directory = context.download_dir()
-    handle, name = tempfile.mkstemp(prefix="gitget-", suffix=".deb", dir=directory)
+    handle, name = tempfile.mkstemp(prefix="alforge-", suffix=".deb", dir=directory)
     os.close(handle)
     destination = Path(name)
     ui.info(
@@ -154,7 +154,7 @@ def download(context, candidate: Plan) -> Path:  # noqa: ANN001 - Context
         raise
     if written == 0:
         destination.unlink(missing_ok=True)
-        raise GitgetError(f"empty download for {candidate.asset.name}")
+        raise AlforgeError(f"empty download for {candidate.asset.name}")
     if candidate.asset.size and written != candidate.asset.size:
         ui.warn(
             f"size mismatch for {candidate.asset.name}: "
@@ -227,15 +227,30 @@ def local_install(
 ) -> deb.PackageInfo:
     """Validate the artifact and hand it to apt."""
     info = deb.package_info(path)
+    other = conflicting_target(context, candidate.target, info.name)
+    if other is not None:
+        raise AlforgeError(
+            f"{info.name} is already tracked through {other}",
+            hint=f"two repositories would manage the same package; "
+            f"stop tracking one first: 'alforge remove {other}'",
+        )
     machine = deb.system_arch()
     if info.architecture not in ("all", machine):
-        raise GitgetError(
+        raise AlforgeError(
             f"{candidate.asset.name} is built for {info.architecture}, this machine is {machine}",
             hint="the release naming may be ambiguous; use --asset to choose explicitly",
         )
     ui.info(f"installing {info.name} {info.version}")
     deb.install_local(path, recommend=recommend, dry_run=context.dry_run)
     return info
+
+
+def conflicting_target(context, target: Target, package: str) -> str | None:  # noqa: ANN001
+    """Another tracked target that already maps to *package*, if any."""
+    for key, entry in context.state.entries.items():
+        if key != str(target) and entry.package == package:
+            return key
+    return None
 
 
 def run(

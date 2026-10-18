@@ -1,6 +1,6 @@
 """Checksum verification against release assets.
 
-Supply-chain reality check: gitget installs packages as root from arbitrary
+Supply-chain reality check: alforge installs packages as root from arbitrary
 repositories.  Whenever the release publishes a checksum manifest we verify the
 downloaded ``.deb`` against it.  With ``require_checksum = true`` (or
 ``--require-checksum``) a missing manifest is a hard failure instead of a

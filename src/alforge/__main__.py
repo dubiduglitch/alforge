@@ -1,4 +1,4 @@
-"""Allow ``python -m gitget``."""
+"""Allow ``python -m alforge``."""
 
 from __future__ import annotations
 

@@ -1,10 +1,10 @@
 """XDG base directory resolution.
 
-gitget follows the XDG split strictly:
+alforge follows the XDG split strictly:
 
-config   -> hand-editable, user intent      (~/.config/gitget)
-state    -> learned data, machine managed   (~/.local/state/gitget)
-cache    -> disposable downloads            (~/.cache/gitget)
+config   -> hand-editable, user intent      (~/.config/alforge)
+state    -> learned data, machine managed   (~/.local/state/alforge)
+cache    -> disposable downloads            (~/.cache/alforge)
 
 Nothing user-facing is ever written under a ``sudo``-owned path, so the tool
 stays usable by an unprivileged user on a shared machine.
@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-APP = "gitget"
+APP = "alforge"
 
 
 def _xdg(env: str, default: str) -> Path:
@@ -50,7 +50,7 @@ def state_file() -> Path:
 
 
 def log_file() -> Path:
-    return state_dir() / "gitget.log"
+    return state_dir() / "alforge.log"
 
 
 def download_dir() -> Path:
@@ -62,7 +62,7 @@ def all_dirs() -> tuple[Path, ...]:
 
 
 def ensure_dirs() -> None:
-    """Create every directory gitget needs, with restrictive permissions."""
+    """Create every directory alforge needs, with restrictive permissions."""
     for directory in all_dirs():
         directory.mkdir(parents=True, exist_ok=True)
         if directory in (config_dir(), state_dir()):

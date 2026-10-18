@@ -3,11 +3,11 @@
 Two files, two very different audiences:
 
 ``config.json``
-    Machine managed, ``0600``, written by ``gitget setup``.  Tokens live here.
+    Machine managed, ``0600``, written by ``alforge setup``.  Tokens live here.
 
 ``repos.txt``
     Human managed.  One target per line, ``#`` starts a comment.  This is the
-    file you edit by hand or append to with ``gitget add``.  gitget never
+    file you edit by hand or append to with ``alforge add``.  alforge never
     writes learned data into it.
 """
 
@@ -199,7 +199,7 @@ class Registry:
         block = ""
         if not self._lines:
             block += (
-                "# gitget tracking registry - one target per line.\n"
+                "# alforge tracking registry - one target per line.\n"
                 "# format: [forge:]path\n"
                 "#   github:owner/repo\n"
                 "#   gitlab:group/project\n"
