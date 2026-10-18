@@ -22,17 +22,22 @@ from .config import SUPPORTED_FORGES
 from .context import Context
 from .errors import AlforgeError
 
-DESCRIPTION = "install and keep up to date .deb packages published on git forges"
+DESCRIPTION = "install and keep up to date .deb packages and AppImages from git forges"
 
 EPILOG = """\
 examples:
   alforge setup --token github=ghp_xxx     raise the GitHub API limit
   alforge install obsidian                 search, install, and start tracking
   alforge install github:jgraph/drawio     install a known repository
+  alforge install github:obsidianmd/obsidian-releases
+                                           a project that only ships AppImages
   alforge list --upgradable                what could be updated
   alforge update && alforge upgrade -y      refresh, then install newer versions
   alforge timer install                    upgrade automatically every day
   alforge purge drawio                     remove package and stop tracking
+
+alforge installs .deb packages through apt, and AppImages as a per-user file
+with a desktop entry and an icon.  Both are tracked and upgraded the same way.
 
 exit codes:
   0 success            4 repository, release or asset not found
@@ -129,6 +134,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_install = subparsers.add_parser("install", help="install the latest release and track it")
     p_install.add_argument("spec", metavar="TARGET|URL")
+    p_install.add_argument(
+        "--kind",
+        choices=("auto", "deb", "appimage"),
+        default="auto",
+        help="force the artifact kind instead of detecting it (default: auto)",
+    )
     p_install.add_argument("--asset", metavar="TEXT", help="only consider assets containing TEXT")
     p_install.add_argument("--force", action="store_true", help="reinstall even if up to date")
     p_install.add_argument(
@@ -145,6 +156,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_upgrade = subparsers.add_parser("upgrade", help="install newer versions of tracked packages")
     p_upgrade.add_argument("specs", nargs="*", metavar="TARGET")
+    p_upgrade.add_argument(
+        "--kind",
+        choices=("auto", "deb", "appimage"),
+        default="auto",
+        help="force the artifact kind instead of detecting it (default: auto)",
+    )
     p_upgrade.add_argument("--asset", metavar="TEXT", help="only consider assets containing TEXT")
     p_upgrade.add_argument("--force", action="store_true", help="reinstall even if up to date")
     p_upgrade.add_argument(

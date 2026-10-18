@@ -17,6 +17,12 @@ def _exit_code(exc: Exception) -> int:
     return getattr(exc, "exit_code", 1)
 
 
+def _kind(args) -> str | None:  # noqa: ANN001
+    """``--kind auto`` means "let the release decide"."""
+    value = getattr(args, "kind", None)
+    return None if value in (None, "auto") else value
+
+
 def cmd_install(context, args) -> int:
     target = resolve(context, args.spec, forge=args.forge)
 
@@ -27,6 +33,7 @@ def cmd_install(context, args) -> int:
         context,
         target,
         asset_filter=args.asset,
+        kind=_kind(args),
         force=args.force,
         download_only=args.download_only,
         recommend=bool(context.config.setting("install_recommends", True)),
@@ -71,7 +78,10 @@ def _install_direct(context, url: str) -> int:
     with destination.open("wb") as sink:
         context.client.download(url, sink.write)
     if destination.suffix != ".deb":
-        raise NotFoundError("only .deb artifacts can be installed this way")
+        raise NotFoundError(
+            "only .deb artifacts can be installed from a bare URL",
+            hint="for an AppImage, install through its repository so it can be tracked",
+        )
     info = deb.package_info(destination)
     deb.install_local(destination, dry_run=context.dry_run)
     ui.ok(f"installed {info.name} {info.version} (not tracked)")
@@ -122,6 +132,7 @@ def cmd_upgrade(context, args) -> int:
                 context,
                 target,
                 asset_filter=args.asset,
+                kind=_kind(args),
                 force=args.force,
                 download_only=args.download_only,
                 recommend=bool(context.config.setting("install_recommends", True)),

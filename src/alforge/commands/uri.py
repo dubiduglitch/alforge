@@ -43,8 +43,8 @@ def _handle(context, args) -> int:  # noqa: ANN001
     target = resolve(context, request.spec)
 
     # Fetch first so the dialog can name the exact artifact that would be
-    # installed, and so a project that publishes no .deb is reported *before*
-    # anything is asked.  Nothing is downloaded yet.
+    # installed, and so a project that publishes nothing installable is reported
+    # *before* anything is asked.  Nothing is downloaded yet.
     candidate = installer.plan(context, target)
     question = (
         f"{request.verb.capitalize()} {candidate.asset.name} "

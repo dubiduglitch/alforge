@@ -338,11 +338,19 @@ class _FakeProvider:
         return self._stable
 
 
+class _EmptyState:
+    """State double: every target is unknown, so the kind is auto-detected."""
+
+    def get(self, key: str) -> EntryState:  # noqa: ARG002
+        return EntryState()
+
+
 class _FakePlanContext:
     offline = False
 
     def __init__(self, provider: _FakeProvider) -> None:
         self._provider = provider
+        self.state = _EmptyState()
 
     def provider(self, forge: str) -> _FakeProvider:
         return self._provider

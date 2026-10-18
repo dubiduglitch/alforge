@@ -3,7 +3,7 @@
 GitHub/GitLab/Gitea asset names are free-form, so selection is a small scoring
 problem rather than a ``grep``:
 
-* the file must be a ``.deb``,
+* the file must be of the requested kind (``.deb`` or ``.AppImage``),
 * the architecture must match this machine (``all``/``noarch`` is acceptable),
 * debug/dev/doc/source artifacts are rejected,
 * naming that resembles the repository is preferred.
@@ -23,6 +23,31 @@ from .errors import AmbiguousError, NotFoundError
 from .providers import Asset
 
 ALL_ARCH_TOKENS = ("all", "noarch", "any")
+
+#: Supported artifact kinds.  The value doubles as the state field and the CLI
+#: ``--kind`` choice, so it must stay stable.
+KIND_DEB = "deb"
+KIND_APPIMAGE = "appimage"
+KINDS = (KIND_DEB, KIND_APPIMAGE)
+
+_SUFFIXES: dict[str, tuple[str, ...]] = {
+    KIND_DEB: (".deb",),
+    KIND_APPIMAGE: (".appimage",),
+}
+
+_LABELS: dict[str, str] = {KIND_DEB: ".deb", KIND_APPIMAGE: ".AppImage"}
+
+
+def label(kind: str) -> str:
+    """Human readable name of a kind, for messages."""
+    return _LABELS.get(kind, kind)
+
+
+def matches_kind(name: str, kind: str) -> bool:
+    suffixes = _SUFFIXES.get(kind)
+    if not suffixes:
+        return False
+    return name.lower().endswith(suffixes)
 
 #: Every token that identifies *some* architecture.  Used to reject a
 #: wrong-architecture build instead of falling back to it.
@@ -61,6 +86,7 @@ def _token_present(name: str, token: str) -> bool:
 def score_asset(
     asset: Asset,
     *,
+    kind: str = KIND_DEB,
     arch: str,
     hint: str | None = None,
     exclude: tuple[str, ...] = (),
@@ -69,9 +95,9 @@ def score_asset(
     lowered = name.lower()
     candidate = Candidate(asset=asset, score=0)
 
-    if not lowered.endswith(".deb"):
+    if not matches_kind(lowered, kind):
         candidate.score = -10_000
-        candidate.reasons.append("not a .deb")
+        candidate.reasons.append(f"not a {label(kind)} asset")
         return candidate
 
     for token in exclude:
@@ -119,13 +145,15 @@ def score_asset(
 def rank(
     assets: tuple[Asset, ...] | list[Asset],
     *,
+    kind: str = KIND_DEB,
     arch: str | None = None,
     hint: str | None = None,
     exclude: tuple[str, ...] = (),
 ) -> list[Candidate]:
     machine_arch = arch or system_arch()
     candidates = [
-        score_asset(asset, arch=machine_arch, hint=hint, exclude=exclude) for asset in assets
+        score_asset(asset, kind=kind, arch=machine_arch, hint=hint, exclude=exclude)
+        for asset in assets
     ]
     return sorted(candidates, key=lambda item: item.score, reverse=True)
 
@@ -133,24 +161,25 @@ def rank(
 def select(
     assets: tuple[Asset, ...] | list[Asset],
     *,
+    kind: str = KIND_DEB,
     arch: str | None = None,
     hint: str | None = None,
     exclude: tuple[str, ...] = (),
     picker=None,  # noqa: ANN001 - Callable[[list[Candidate]], Candidate | None]
 ) -> Candidate:
-    """Pick the best .deb asset, or explain why it could not be picked."""
-    ranked = rank(assets, arch=arch, hint=hint, exclude=exclude)
+    """Pick the best asset of *kind*, or explain why it could not be picked."""
+    ranked = rank(assets, kind=kind, arch=arch, hint=hint, exclude=exclude)
     usable = [candidate for candidate in ranked if not candidate.rejected]
     if not usable:
-        deb_assets = [asset.name for asset in assets if asset.name.lower().endswith(".deb")]
-        if not deb_assets:
+        available = [asset.name for asset in assets if matches_kind(asset.name, kind)]
+        if not available:
             raise NotFoundError(
-                "no .deb asset in this release",
-                hint="the project may only publish archives or AppImages",
+                f"no {label(kind)} asset in this release",
+                hint="the project may only publish archives, or another packaging format",
             )
         raise NotFoundError(
-            f"no .deb asset matches architecture {arch or system_arch()}",
-            hint=f"available: {', '.join(deb_assets[:5])}",
+            f"no {label(kind)} asset matches architecture {arch or system_arch()}",
+            hint=f"available: {', '.join(available[:5])}",
         )
 
     tied = [candidate for candidate in usable if candidate.score == usable[0].score]
@@ -160,7 +189,7 @@ def select(
             if chosen is not None:
                 return chosen
         raise AmbiguousError(
-            "several .deb assets match equally well",
+            f"several {label(kind)} assets match equally well",
             candidates=[candidate.asset.name for candidate in tied],
             hint="name the asset explicitly or disambiguate the release",
         )

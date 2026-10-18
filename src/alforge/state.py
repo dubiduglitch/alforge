@@ -4,7 +4,8 @@ Kept out of ``repos.txt`` on purpose.  ``state.json`` answers two questions:
 
 1. Has the upstream release changed since the last time we looked?  (cheap check
    based on the release tag plus the asset name/id, no download involved)
-2. Which Debian package did this repository install, and at which version?
+2. Which package or application did this repository install, in which format
+   (``.deb`` or AppImage), and at which version?
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ STATE_VERSION = 1
 
 @dataclass
 class EntryState:
+    kind: str | None = None
     package: str | None = None
     installed_version: str | None = None
     last_tag: str | None = None
@@ -39,6 +41,7 @@ class EntryState:
             {
                 key: value
                 for key, value in {
+                    "kind": self.kind,
                     "package": self.package,
                     "installed_version": self.installed_version,
                     "last_tag": self.last_tag,
@@ -57,6 +60,7 @@ class EntryState:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EntryState":
         known = {
+            "kind",
             "package",
             "installed_version",
             "last_tag",
@@ -68,6 +72,7 @@ class EntryState:
             "upgraded_at",
         }
         return cls(
+            kind=data.get("kind"),
             package=data.get("package"),
             installed_version=data.get("installed_version"),
             last_tag=data.get("last_tag"),

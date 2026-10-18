@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 
-from . import deb, ui
+from . import appimage, deb, ui
+from .assets import KIND_APPIMAGE, KIND_DEB
 from .config import Target, short_name_matches
 from .versions import is_newer
 
@@ -57,10 +58,23 @@ def guess_package(target: Target, installed: dict[str, str]) -> str | None:
 
 def build_row(context, target: Target, *, installed: dict[str, str] | None = None) -> Row:  # noqa: ANN001
     entry = context.state.get(str(target))
-    packages = installed if installed is not None else deb.installed_packages()
-    package = entry.package or guess_package(target, packages) or ""
-    current = packages.get(package) if package else None
-    latest = entry.last_version
+    kind = entry.kind or KIND_DEB
+    if kind == KIND_APPIMAGE:
+        package = entry.package or ""
+        latest = entry.last_version
+        if package:
+            current = appimage.installed_version(package)
+            if current is None and appimage.is_installed(package):
+                # The image is there but we cannot read a version out of its
+                # name; trust what was recorded at install time.
+                current = entry.last_version
+        else:
+            current = None
+    else:
+        packages = installed if installed is not None else deb.installed_packages()
+        package = entry.package or guess_package(target, packages) or ""
+        current = packages.get(package) if package else None
+        latest = entry.last_version
 
     if latest is None:
         status = UNKNOWN
@@ -82,7 +96,11 @@ def build_row(context, target: Target, *, installed: dict[str, str] | None = Non
 
 
 def build_rows(context, targets: list[Target], *, upgradable_only: bool = False) -> list[Row]:  # noqa: ANN001
-    installed = deb.installed_packages()
+    """Status of every target. The dpkg database is read once, for the .deb rows."""
+    needs_dpkg = any(
+        (context.state.get(str(target)).kind or KIND_DEB) == KIND_DEB for target in targets
+    )
+    installed = deb.installed_packages() if needs_dpkg else {}
     rows = [build_row(context, target, installed=installed) for target in targets]
     if upgradable_only:
         rows = [row for row in rows if row.status in (UPGRADABLE, NOT_INSTALLED)]
