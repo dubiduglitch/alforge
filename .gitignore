@@ -5,3 +5,10 @@ build/
 dist/
 .venv/
 .pytest_cache/
+.pybuild/
+debian/files
+debian/gitget/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/gitget.substvars
+*.debhelper.log

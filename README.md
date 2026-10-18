@@ -112,3 +112,23 @@ If `gitget` saves you time, consider leaving a small tip:
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Install as a .deb
+
+You can also install `gitget` as a native Debian package:
+
+```bash
+# Download from the latest release
+wget https://github.com/dubiduglitch/gitget/releases/download/v0.1.0/gitget_0.1.0-1_all.deb
+sudo dpkg -i gitget_0.1.0-1_all.deb
+```
+
+This installs `gitget` to `/usr/bin/gitget` with the Python package in `/usr/lib/python3/dist-packages/`. The package depends on `python3 (>= 3.11)`, `sudo`, `apt-utils`, and `dpkg` — all present on any Debian/Ubuntu system.
+
+To build from source:
+
+```bash
+sudo apt install debhelper dh-python pybuild-plugin-pyproject python3-all python3-setuptools python3-wheel
+dpkg-buildpackage -us -uc -b
+# The .deb is written to the parent directory
+```

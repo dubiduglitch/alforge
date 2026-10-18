@@ -1,0 +1,6 @@
+gitget (0.1.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging.
+  * Multi-forge .deb package manager with systemd --user timer support.
+
+ -- dubiduglitch <dubiduglitch@users.noreply.github.com>  Sun, 18 Oct 2026 22:30:00 +0000

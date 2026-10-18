@@ -9,7 +9,7 @@ description = "Install and keep up to date .deb packages published on GitHub, Gi
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "rsxn" }]
+authors = [{ name = "dubiduglitch" }]
 keywords = ["deb", "debian", "github", "gitlab", "gitea", "package-manager", "apt"]
 classifiers = [
     "Environment :: Console",
@@ -25,7 +25,7 @@ dependencies = []
 gitget = "gitget.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/rsxn/gitget"
+Homepage = "https://github.com/dubiduglitch/gitget"
 
 [tool.setuptools.packages.find]
 where = ["src"]
