@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .. import ui
+from ..records import forget
 from ..report import build_rows, filter_targets, render, select_target
 from ..targets import resolve
 
@@ -36,6 +37,7 @@ def cmd_remove(context, args) -> int:
             continue
         entry = context.state.get(str(target))
         if not context.dry_run and context.registry.remove(target):
+            forget(context, target)
             ui.ok(f"stopped tracking {target}")
             if entry.package:
                 ui.detail(
@@ -45,6 +47,7 @@ def cmd_remove(context, args) -> int:
                 )
         else:
             ui.warn(f"{target} was not tracked")
+        context.save_state()
     return 1 if failures else 0
 
 

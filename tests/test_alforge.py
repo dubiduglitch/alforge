@@ -23,6 +23,7 @@ from alforge import assets, checksum, deb, http, installer, lock, report, ui, ve
 from alforge.config import Target, parse_target, short_name_matches
 from alforge.errors import AlforgeError, AmbiguousError, ChecksumError, NetworkError, NotFoundError
 from alforge.providers import Asset, Release
+from alforge.records import forget
 from alforge.state import EntryState, State
 
 _XDG_NAMES = ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
@@ -393,7 +394,9 @@ class DownloadCacheTest(unittest.TestCase):
         self.assertEqual(path.stat().st_mode & 0o077, 0)
 
 
-class LockTest(unittest.TestCase):
+class _SandboxedTest(unittest.TestCase):
+    """Redirects the XDG directories into a throwaway directory."""
+
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -409,6 +412,8 @@ class LockTest(unittest.TestCase):
             else:
                 os.environ[name] = value
 
+
+class LockTest(_SandboxedTest):
     def test_lock_is_exclusive(self):
         with lock.exclusive(wait=False):
             with self.assertRaises(lock.LockBusy):
@@ -420,6 +425,25 @@ class LockTest(unittest.TestCase):
             pass
         with lock.exclusive(wait=False):
             pass
+
+
+class ForgetTest(_SandboxedTest):
+    def test_forget_drops_the_learned_entry(self):
+        state = State.load()
+        entry = state.get("github:a/b")
+        entry.package = "app"
+        entry.last_version = "1.0.0"
+        state.save()
+        self.assertIn("github:a/b", State.load().entries)
+
+        class _Context:
+            pass
+
+        context = _Context()
+        context.state = State.load()
+        forget(context, Target("github", "a/b"))
+        context.state.save()
+        self.assertNotIn("github:a/b", State.load().entries)
 
 
 if __name__ == "__main__":
