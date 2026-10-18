@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from . import deb, ui
+from . import ui
 from .config import Target
-from .installer import Plan
+from .installer import Plan, installed_version_of
 
 
 def _now() -> str:
@@ -18,11 +18,12 @@ def record_check(context, target: Target, candidate: Plan | None) -> None:  # no
     entry = context.state.get(str(target))
     entry.checked_at = _now()
     if candidate is not None:
+        entry.kind = candidate.kind
         entry.last_tag = candidate.release.tag
         entry.last_asset = candidate.asset.name
         entry.last_asset_url = candidate.asset.url
     if entry.package:
-        entry.installed_version = deb.installed_version(entry.package)
+        entry.installed_version = installed_version_of(entry.kind, entry.package)
 
 
 def record_install(
@@ -36,12 +37,13 @@ def record_install(
 ) -> None:
     """Remember a successful installation."""
     entry = context.state.get(str(target))
+    entry.kind = candidate.kind
     entry.package = package
     entry.last_tag = candidate.release.tag
     entry.last_asset = candidate.asset.name
     entry.last_asset_url = candidate.asset.url
     entry.last_version = version
-    entry.installed_version = deb.installed_version(package) or version
+    entry.installed_version = installed_version_of(candidate.kind, package) or version
     entry.upgraded_at = _now()
     entry.checked_at = _now()
     if digest:
@@ -59,17 +61,18 @@ def record_download(
 ) -> None:
     """Remember an artifact that was fetched but deliberately not installed.
 
-    The package/version come from the ``.deb`` control archive, so ``list`` can
-    report what is available even though nothing was installed, and the next run
-    finds the artifact already in the cache.
+    The name/version come from the artifact itself, so ``list`` can report what
+    is available even though nothing was installed, and the next run finds the
+    artifact already in the cache.
     """
     entry = context.state.get(str(target))
+    entry.kind = candidate.kind
     entry.package = package
     entry.last_tag = candidate.release.tag
     entry.last_asset = candidate.asset.name
     entry.last_asset_url = candidate.asset.url
     entry.last_version = version
-    entry.installed_version = deb.installed_version(package)
+    entry.installed_version = installed_version_of(candidate.kind, package)
     entry.checked_at = _now()
     if digest:
         entry.last_sha256 = digest

@@ -9,7 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .. import __version__, deb, paths, ui
+from .. import __version__, appimage, deb, paths, ui
+from ..assets import KIND_APPIMAGE
 from ..config import SUPPORTED_FORGES, Registry, insecure_permissions
 
 REGISTRY_HEADER = """\
@@ -207,6 +208,36 @@ def cmd_doctor(context, args) -> int:  # noqa: ANN001
     targets = context.registry.targets
     _check("registry", paths.registry_file().exists(), str(paths.registry_file()))
     _check("tracked repositories", bool(targets), str(len(targets)))
+
+    ui.heading("AppImage support")
+    _check(
+        "update-desktop-database",
+        shutil.which("update-desktop-database") is not None,
+        "from the desktop-file-utils package, refreshes new menu entries",
+    )
+    fuse = next((tool for tool in ("fusermount", "fusermount3") if shutil.which(tool)), "")
+    _check(
+        "FUSE",
+        bool(fuse),
+        "not needed to install, but required to run a type-2 AppImage",
+    )
+    bin_directory = paths.bin_dir()
+    on_path = str(bin_directory) in os.environ.get("PATH", "").split(os.pathsep)
+    _check(
+        "launch links on PATH",
+        on_path,
+        str(bin_directory) if on_path else f"add {bin_directory} to PATH",
+    )
+    for target in targets:
+        entry = context.state.get(str(target))
+        if (entry.kind or "") != KIND_APPIMAGE:
+            continue
+        identity = entry.package or ""
+        _check(
+            str(target),
+            appimage.is_installed(identity),
+            appimage.installed_version(identity) or "not installed",
+        )
 
     ui.heading("Automation")
     systemd = _check("systemd --user", _systemd_user_available())

@@ -37,6 +37,37 @@ def cache_dir() -> Path:
     return _xdg("XDG_CACHE_HOME", ".cache") / APP
 
 
+def data_dir() -> Path:
+    """Where installed AppImages live, next to the desktop entries they own."""
+    return _xdg("XDG_DATA_HOME", ".local/share") / APP
+
+
+def appimage_dir() -> Path:
+    return data_dir() / "AppImages"
+
+
+def bin_dir() -> Path:
+    """Directory holding the stable launch links for AppImages.
+
+    ``~/.local/bin`` (or ``$XDG_BIN_HOME``) is a shared namespace, so nothing
+    here is ever created eagerly: only :func:`install` touches it, and it
+    refuses to overwrite a file it does not own.
+    """
+    value = os.environ.get("XDG_BIN_HOME")
+    if value:
+        return Path(value).expanduser()
+    return Path.home() / ".local/bin"
+
+
+def applications_dir() -> Path:
+    return _xdg("XDG_DATA_HOME", ".local/share") / "applications"
+
+
+def icons_dir(size: str) -> Path:
+    """A directory inside the ``hicolor`` icon theme (``256x256``, ``scalable``)."""
+    return _xdg("XDG_DATA_HOME", ".local/share") / "icons" / "hicolor" / size / "apps"
+
+
 def config_file() -> Path:
     return config_dir() / "config.json"
 
@@ -58,7 +89,7 @@ def download_dir() -> Path:
 
 
 def all_dirs() -> tuple[Path, ...]:
-    return (config_dir(), state_dir(), cache_dir(), download_dir())
+    return (config_dir(), state_dir(), cache_dir(), download_dir(), appimage_dir())
 
 
 def ensure_dirs() -> None:

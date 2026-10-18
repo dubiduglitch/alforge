@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import assets as asset_selection
+from . import appimage, assets as asset_selection
 from . import checksum, deb, ui
 from .config import Target
 from .errors import ChecksumError, AlforgeError, NotFoundError, UsageError
@@ -26,6 +26,7 @@ class Plan:
     target: Target
     release: Release
     asset: Asset
+    kind: str = asset_selection.KIND_DEB
 
     @property
     def asset_id(self) -> str:
@@ -50,7 +51,7 @@ def _size_label(size: int | None) -> str:
 def _picker_for_tied_assets() -> object:
     def pick(candidates):  # noqa: ANN001
         index = ui.choose(
-            "Several .deb assets match equally well:",
+            "Several assets match equally well:",
             [f"{candidate.asset.name}  [{candidate.score}]" for candidate in candidates],
         )
         if index is None:
@@ -60,12 +61,50 @@ def _picker_for_tied_assets() -> object:
     return pick
 
 
+def _select_asset(
+    context,  # noqa: ANN001 - Context
+    candidates,  # noqa: ANN001 - tuple[Asset, ...]
+    *,
+    requested: str | None,
+    hint: str,
+    picker,  # noqa: ANN001
+) -> asset_selection.Candidate:
+    """Pick an asset, preferring ``.deb`` and falling back to AppImage.
+
+    An explicit *requested* kind (from ``--kind`` or the state of an already
+    tracked repository) is honoured strictly.  Otherwise ``.deb`` is tried
+    first, because it is the format that goes through the system's package
+    manager, and an AppImage is used only when no ``.deb`` fits.
+    """
+    exclude = context.asset_exclude()
+    if requested:
+        return asset_selection.select(
+            candidates, kind=requested, hint=hint, exclude=exclude, picker=picker
+        )
+    try:
+        return asset_selection.select(
+            candidates, kind=asset_selection.KIND_DEB, hint=hint, exclude=exclude, picker=picker
+        )
+    except NotFoundError as no_deb:
+        try:
+            return asset_selection.select(
+                candidates,
+                kind=asset_selection.KIND_APPIMAGE,
+                hint=hint,
+                exclude=exclude,
+                picker=picker,
+            )
+        except NotFoundError:
+            raise no_deb from None
+
+
 def plan(
     context,  # noqa: ANN001 - Context
     target: Target,
     *,
     asset_filter: str | None = None,
     allow_prerelease: bool = False,
+    kind: str | None = None,
 ) -> Plan:
     """Resolve the newest release asset worth installing for *target*."""
     if context.offline:
@@ -106,20 +145,42 @@ def plan(
             )
 
     picker = _picker_for_tied_assets() if ui.is_tty() else None
-    chosen = asset_selection.select(
+    entry = context.state.get(str(target))
+    chosen = _select_asset(
+        context,
         candidates,
+        requested=kind or entry.kind,
         hint=target.name,
-        exclude=context.asset_exclude(),
         picker=picker,
     )
     if chosen.reasons:
         ui.detail(f"selected {chosen.asset.name} ({', '.join(chosen.reasons)})")
-    return Plan(target=target, release=release, asset=chosen.asset)
+    resolved = kind or entry.kind
+    if not resolved:
+        resolved = (
+            asset_selection.KIND_APPIMAGE
+            if appimage.is_appimage_asset(chosen.asset.name)
+            else asset_selection.KIND_DEB
+        )
+    return Plan(target=target, release=release, asset=chosen.asset, kind=resolved)
 
 
 # --------------------------------------------------------------------------- #
 # change detection
 # --------------------------------------------------------------------------- #
+def installed_version_of(kind: str, identity: str | None) -> str | None:
+    """Installed version of a tracked thing, whichever kind it is.
+
+    ``identity`` is a Debian package name for ``.deb`` and an alforge app id for
+    an AppImage.
+    """
+    if not identity:
+        return None
+    if kind == asset_selection.KIND_APPIMAGE:
+        return appimage.installed_version(identity)
+    return deb.installed_version(identity)
+
+
 def up_to_date(context, candidate: Plan) -> bool:  # noqa: ANN001 - Context
     """Cheap check: has anything changed since the last successful upgrade?
 
@@ -128,14 +189,19 @@ def up_to_date(context, candidate: Plan) -> bool:  # noqa: ANN001 - Context
     from a tool that tracks a release.
     """
     entry = context.state.get(str(candidate.target))
-    package = entry.package
-    if not package or not entry.last_version:
+    identity = entry.package
+    if not identity or not entry.last_version:
         return False
     if entry.last_tag != candidate.release.tag:
         return False
     if entry.last_asset != candidate.asset.name:
         return False
-    installed = deb.installed_version(package)
+    installed = installed_version_of(candidate.kind, identity)
+    if installed is None and candidate.kind == asset_selection.KIND_APPIMAGE:
+        # The image is still there but its name no longer carries a version;
+        # fall back to what alforge recorded when it installed it.
+        if appimage.is_installed(identity):
+            installed = entry.last_version
     if installed is None:
         return False
     from .versions import compare
@@ -151,15 +217,23 @@ def _cache_slug(candidate: Plan) -> str:
     return re.sub(r"[^a-z0-9]+", "-", str(candidate.target).lower()).strip("-")
 
 
+def artifact_suffix(kind: str) -> str:
+    """Extension of the artifact we cache for *kind*."""
+    return ".AppImage" if kind == asset_selection.KIND_APPIMAGE else ".deb"
+
+
 def cached_path(context, candidate: Plan) -> Path:  # noqa: ANN001 - Context
     """Deterministic cache location of the exact artifact a plan describes."""
     ident = re.sub(r"[^A-Za-z0-9._-]+", "-", candidate.asset_id).strip("-")
-    return context.download_dir() / f"{_cache_slug(candidate)}--{ident}.deb"
+    suffix = artifact_suffix(candidate.kind)
+    return context.download_dir() / f"{_cache_slug(candidate)}--{ident}{suffix}"
 
 
 def _prune_cache(context, candidate: Plan, *, keep: Path) -> None:  # noqa: ANN001
     """Drop older artifacts for the same target so the cache cannot grow forever."""
-    for stale in context.download_dir().glob(f"{_cache_slug(candidate)}--*.deb"):
+    for stale in context.download_dir().glob(
+        f"{_cache_slug(candidate)}--*{artifact_suffix(candidate.kind)}"
+    ):
         if stale != keep:
             stale.unlink(missing_ok=True)
 
@@ -237,7 +311,13 @@ def expected_digest(context, candidate: Plan) -> tuple[str | None, str | None]: 
 def verify(context, candidate: Plan, path: Path, *, require: bool | None = None) -> str:
     """Verify *path*, returning the sha256 that was recorded."""
     expected, source = expected_digest(context, candidate)
-    must = context.require_checksum(require)
+    if require is None:
+        # An AppImage is an unsigned executable blob, so a missing checksum is
+        # treated as fatal unless the user explicitly opts out.  A .deb keeps
+        # the historical default, which is to warn and continue.
+        must = context.require_checksum(None) or candidate.kind == asset_selection.KIND_APPIMAGE
+    else:
+        must = require
     if expected:
         digest = checksum.verify(path, expected)
         ui.ok(f"checksum verified against {source}")
@@ -257,15 +337,38 @@ def verify(context, candidate: Plan, path: Path, *, require: bool | None = None)
 # --------------------------------------------------------------------------- #
 # install
 # --------------------------------------------------------------------------- #
+def artifact_info(context, candidate: Plan, path: Path):  # noqa: ANN001, ANN201
+    """Read name and version out of a downloaded artifact, per kind."""
+    if candidate.kind == asset_selection.KIND_APPIMAGE:
+        return appimage.probe(
+            path,
+            app_id=appimage.app_id(candidate.target),
+            fallback_version=candidate.release.tag,
+        )
+    return deb.package_info(path)
+
+
 def local_install(
     context,  # noqa: ANN001 - Context
     candidate: Plan,
     path: Path,
     *,
-    info: deb.PackageInfo | None = None,
+    info=None,  # noqa: ANN001 - deb.PackageInfo | appimage.AppImageInfo
     recommend: bool = True,
-) -> deb.PackageInfo:
-    """Validate the artifact and hand it to apt."""
+):
+    """Validate the artifact and hand it to whichever tool installs it."""
+    if candidate.kind == asset_selection.KIND_APPIMAGE:
+        info = info or artifact_info(context, candidate, path)
+        other = conflicting_target(context, candidate.target, info.name)
+        if other is not None:
+            raise AlforgeError(
+                f"{info.name} is already tracked through {other}",
+                hint=f"two repositories would manage the same application; "
+                f"stop tracking one first: 'alforge remove {other}'",
+            )
+        ui.info(f"installing {info.name} {info.version}")
+        return appimage.install(context, candidate.target, path, info)
+
     info = info or deb.package_info(path)
     other = conflicting_target(context, candidate.target, info.name)
     if other is not None:
@@ -301,24 +404,29 @@ def run(
     *,
     candidate: Plan | None = None,
     asset_filter: str | None = None,
+    kind: str | None = None,
     force: bool = False,
     download_only: bool = False,
     recommend: bool = True,
     require_checksum: bool | None = None,
     allow_prerelease: bool = False,
-) -> tuple[Plan, Path, deb.PackageInfo | None, str | None]:
+):
     """Full pipeline for one target.
 
     Returns (plan, artifact path, package info, verified sha256).  ``package
     info`` is None only when the target was already up to date and nothing ran;
-    in ``download_only`` mode it is the control data read from the artifact.
+    in ``download_only`` mode it is the metadata read from the artifact.
 
     Pass *candidate* to reuse a plan that was already computed (the ``alforge://``
     handler shows its details before asking, so it plans once).
     """
     if candidate is None:
         candidate = plan(
-            context, target, asset_filter=asset_filter, allow_prerelease=allow_prerelease
+            context,
+            target,
+            asset_filter=asset_filter,
+            allow_prerelease=allow_prerelease,
+            kind=kind,
         )
     entry = context.state.get(str(target))
 
@@ -328,7 +436,7 @@ def run(
 
     path = download(context, candidate)
     digest = verify(context, candidate, path, require=require_checksum)
-    info = deb.package_info(path)
+    info = artifact_info(context, candidate, path)
     if download_only:
         ui.ok(f"downloaded to {path} (not installed)")
         return candidate, path, info, digest
