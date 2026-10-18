@@ -1,3 +1,19 @@
+alforge (0.2.0-1) unstable; urgency=medium
+
+  * Browser integration: register the alforge:// URI scheme with a .desktop
+    file, and ship a content script that adds an "Install with alforge" button
+    to GitHub, GitLab and Codeberg project pages (the GNOME-Look model).
+  * New internal 'handle-uri' command: resolves the target, shows the exact
+    artifact in a zenity/kdialog confirmation, and installs only on approval.
+    Only forge targets are accepted, never a direct .deb URL.
+  * --dry-run now prints the apt command it would run instead of reporting a
+    successful installation.
+  * Fix Codeberg: 'codeberg:owner/repo' and pasted codeberg.org URLs failed with
+    "codeberg expects 'host/owner/repo'". The host is implied again, and a
+    lookalike host is no longer accepted.
+
+ -- dubiduglitch <dubiduglitch@users.noreply.github.com>  Sun, 18 Oct 2026 01:20:00 +0000
+
 alforge (0.1.1-1) unstable; urgency=medium
 
   * Follow the newest stable release: a pre-release is skipped in favour of the

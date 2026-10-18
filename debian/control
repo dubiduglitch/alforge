@@ -10,10 +10,13 @@ Rules-Requires-Root: no
 Package: alforge
 Architecture: all
 Depends: ${python3:Depends}, ${misc:Depends}, python3 (>= 3.11), sudo, apt-utils, dpkg
-Recommends: systemd, curl, ca-certificates
+Recommends: systemd, curl, ca-certificates, zenity | kdialog, desktop-file-utils
 Description: Multi-forge CLI to install and keep .deb packages up to date
  alforge is a clean, multi-forge CLI tool that installs and automatically keeps
  .deb packages from GitHub, GitLab, Codeberg, and Gitea/Forgejo up to date.
  It features architecture-aware asset selection, SHA-256 checksum verification,
  per-user XDG-compliant configuration, and set-and-forget updates via
  systemd --user timers. Root privileges are only required for apt-get operations.
+ .
+ It also registers the alforge:// URI scheme so a browser can request an
+ install (an "Install with alforge" button on forge project pages).

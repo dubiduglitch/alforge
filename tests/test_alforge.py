@@ -19,9 +19,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from alforge import assets, checksum, deb, http, installer, lock, report, ui, versions
+from alforge import assets, checksum, deb, http, installer, lock, report, ui, uri, versions
 from alforge.config import Target, parse_target, short_name_matches
-from alforge.errors import AlforgeError, AmbiguousError, ChecksumError, NetworkError, NotFoundError
+from alforge.errors import (
+    AlforgeError,
+    AmbiguousError,
+    ChecksumError,
+    NetworkError,
+    NotFoundError,
+    UsageError,
+)
+from alforge.providers.gitea import CodebergProvider
 from alforge.providers import Asset, Release
 from alforge.records import forget
 from alforge.state import EntryState, State
@@ -261,6 +269,46 @@ class TargetTest(unittest.TestCase):
         self.assertFalse(short_name_matches(target, "something-else"))
 
 
+class CodebergTest(unittest.TestCase):
+    """Codeberg targets omit the host; the provider fills in codeberg.org."""
+
+    class _Client:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def get_json(self, url, *, forge=None, allow_404=False):  # noqa: ANN001
+            self.urls.append(url)
+            return {"tag_name": "v1.0.0", "assets": []}
+
+    def test_owner_repo_is_enough(self):
+        client = self._Client()
+        CodebergProvider(client).latest_release("owner/repo")
+        self.assertEqual(
+            client.urls[0],
+            "https://codeberg.org/api/v1/repos/owner/repo/releases/latest",
+        )
+
+    def test_an_explicit_host_is_still_accepted(self):
+        client = self._Client()
+        CodebergProvider(client).latest_release("codeberg.org/owner/repo")
+        self.assertEqual(
+            client.urls[0],
+            "https://codeberg.org/api/v1/repos/owner/repo/releases/latest",
+        )
+
+    def test_a_bare_name_is_refused(self):
+        with self.assertRaises(ValueError):
+            CodebergProvider(self._Client()).latest_release("owner")
+
+    def test_parse_url_returns_a_hostless_path(self):
+        provider = CodebergProvider(self._Client())
+        self.assertEqual(provider.parse_url("https://codeberg.org/owner/repo"), "owner/repo")
+
+    def test_parse_url_ignores_a_lookalike_host(self):
+        provider = CodebergProvider(self._Client())
+        self.assertIsNone(provider.parse_url("https://codeberg.org.evil.example/owner/repo"))
+
+
 # --------------------------------------------------------------------------- #
 # test doubles for the pipeline
 # --------------------------------------------------------------------------- #
@@ -392,6 +440,67 @@ class DownloadCacheTest(unittest.TestCase):
         context = _FakeDownloadContext(Path(self.tmp.name))
         path = installer.download(context, self._candidate())
         self.assertEqual(path.stat().st_mode & 0o077, 0)
+
+
+class UriTest(unittest.TestCase):
+    """The alforge:// scheme is the bridge a web page uses, so it is strict."""
+
+    def test_install_from_github(self):
+        request = uri.parse("alforge://install/github/owner/repo")
+        self.assertEqual(request.verb, "install")
+        self.assertEqual(request.spec, "github:owner/repo")
+
+    def test_track_from_codeberg(self):
+        request = uri.parse("alforge://track/codeberg/owner/repo")
+        self.assertEqual(request.verb, "track")
+        self.assertEqual(request.spec, "codeberg:owner/repo")
+
+    def test_gitea_host_is_kept(self):
+        request = uri.parse("alforge://install/gitea/git.example.org/owner/repo")
+        self.assertEqual(request.spec, "gitea:git.example.org/owner/repo")
+
+    def test_forgejo_is_accepted(self):
+        self.assertEqual(
+            uri.parse("alforge://install/forgejo/owner/repo").spec, "forgejo:owner/repo"
+        )
+
+    def test_uppercase_action_is_normalised(self):
+        self.assertEqual(uri.parse("alforge://INSTALL/github/o/r").verb, "install")
+
+    def test_percent_encoding_is_decoded(self):
+        request = uri.parse("alforge://install/github/my%2Downer/repo")
+        self.assertEqual(request.spec, "github:my-owner/repo")
+
+    def test_rejects_a_foreign_scheme(self):
+        with self.assertRaises(UsageError):
+            uri.parse("https://example.com/install/github/o/r")
+
+    def test_rejects_an_unknown_action(self):
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://purge/github/o/r")
+
+    def test_rejects_an_unknown_forge(self):
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://install/bitbucket/o/r")
+
+    def test_rejects_a_url_in_the_forge_position(self):
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://install/https/evil.example/x.deb")
+
+    def test_rejects_a_url_as_the_target(self):
+        # Otherwise a page could point the pipeline at an arbitrary artifact.
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://install/github/https://evil.example/x.deb")
+
+    def test_rejects_an_incomplete_target(self):
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://install/github/owner")
+
+    def test_rejects_a_query_or_fragment(self):
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://install/github/o/r?asset=evil.deb")
+        with self.assertRaises(UsageError):
+            uri.parse("alforge://install/github/o/r#frag")
 
 
 class _SandboxedTest(unittest.TestCase):

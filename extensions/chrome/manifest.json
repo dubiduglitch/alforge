@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "alforge",
+  "version": "0.1.0",
+  "description": "Adds an \"Install with alforge\" button to git forge project pages.",
+  "homepage_url": "https://github.com/dubiduglitch/alforge",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://github.com/*",
+        "https://gitlab.com/*",
+        "https://codeberg.org/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

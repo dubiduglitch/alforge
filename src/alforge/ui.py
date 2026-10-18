@@ -8,6 +8,8 @@ trail in ``~/.local/state/alforge/alforge.log``.
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -191,6 +193,43 @@ def confirm(question: str, *, default: bool = False) -> bool:
     if not answer:
         return default
     return answer in ("y", "yes", "o", "oui")
+
+
+#: Graphical dialog programs, in order of preference.
+_DIALOG_TOOLS = ("zenity", "kdialog")
+
+
+def _dialog_command(tool: str, question: str) -> list[str]:
+    if tool == "zenity":
+        return ["zenity", "--question", "--title=alforge", "--no-wrap", f"--text={question}"]
+    return ["kdialog", "--title", "alforge", "--yesno", question]
+
+
+def dialog_tool() -> str | None:
+    """Name of the graphical dialog program available, if any."""
+    for tool in _DIALOG_TOOLS:
+        if shutil.which(tool):
+            return tool
+    return None
+
+
+def confirm_gui(question: str, *, default: bool = False) -> bool:
+    """Ask yes/no through a graphical dialog. Never assumes consent by itself.
+
+    Used by the ``alforge://`` handler, where a web page started us and there is
+    no terminal attached: a human still has to approve the exact artifact.  The
+    answer is *default* when no dialog tool is installed, so a missing dialog
+    refuses rather than installs.
+    """
+    if _ASSUME_YES:
+        return True
+    tool = dialog_tool()
+    if tool is None:
+        return default
+    try:
+        return subprocess.run(_dialog_command(tool, question), check=False).returncode == 0
+    except OSError:
+        return default
 
 
 def choose(question: str, options: Sequence[str], *, default: int = 1) -> int | None:

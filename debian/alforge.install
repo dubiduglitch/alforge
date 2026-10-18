@@ -1,0 +1,4 @@
+# Ship the browser extension so it can be loaded unpacked without the sources.
+extensions/chrome usr/share/alforge/extension
+# debhelper does not pick up debian/*.desktop on its own.
+debian/alforge.desktop usr/share/applications/

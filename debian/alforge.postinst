@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+    # Register the alforge:// scheme handler right away, so a browser finds it
+    # without waiting for the next desktop-file-utils trigger.
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database -q /usr/share/applications || true
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0

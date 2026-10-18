@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=alforge
+GenericName=Forge package installer
+Comment=Install a .deb published on a git forge
+Exec=alforge handle-uri %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/alforge;
+Categories=System;PackageManager;
+Keywords=deb;package;forge;github;gitlab;codeberg;gitea;

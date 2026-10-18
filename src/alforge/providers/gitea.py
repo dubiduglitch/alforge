@@ -120,9 +120,19 @@ class CodebergProvider(GiteaProvider):
     def __init__(self, client, host: str = DEFAULT_HOST) -> None:
         super().__init__(client, host, forge="codeberg")
 
+    def _split(self, path: str) -> tuple[str, str]:
+        """Codeberg lives on a single host, so ``owner/repo`` is unambiguous."""
+        segments = path.split("/")
+        if len(segments) >= 3:
+            return segments[0], "/".join(segments[1:])
+        if len(segments) == 2 and all(segments):
+            return DEFAULT_HOST, path
+        raise ValueError(f"codeberg expects 'owner/repo', got {path!r}")
+
     def parse_url(self, url: str) -> str | None:
         split = urlsplit(url)
-        if not split.netloc or "codeberg.org" not in split.netloc:
+        host = (split.netloc or "").lower().removeprefix("www.")
+        if host != DEFAULT_HOST:
             return None
         match = URL_RE.match(url)
         if not match:

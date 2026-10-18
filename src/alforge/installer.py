@@ -281,7 +281,9 @@ def local_install(
             hint="the release naming may be ambiguous; use --asset to choose explicitly",
         )
     ui.info(f"installing {info.name} {info.version}")
-    deb.install_local(path, recommend=recommend, dry_run=context.dry_run)
+    command = deb.install_local(path, recommend=recommend, dry_run=context.dry_run)
+    if context.dry_run:
+        ui.info("would run: " + " ".join(command))
     return info
 
 
@@ -297,6 +299,7 @@ def run(
     context,  # noqa: ANN001 - Context
     target: Target,
     *,
+    candidate: Plan | None = None,
     asset_filter: str | None = None,
     force: bool = False,
     download_only: bool = False,
@@ -309,10 +312,14 @@ def run(
     Returns (plan, artifact path, package info, verified sha256).  ``package
     info`` is None only when the target was already up to date and nothing ran;
     in ``download_only`` mode it is the control data read from the artifact.
+
+    Pass *candidate* to reuse a plan that was already computed (the ``alforge://``
+    handler shows its details before asking, so it plans once).
     """
-    candidate = plan(
-        context, target, asset_filter=asset_filter, allow_prerelease=allow_prerelease
-    )
+    if candidate is None:
+        candidate = plan(
+            context, target, asset_filter=asset_filter, allow_prerelease=allow_prerelease
+        )
     entry = context.state.get(str(target))
 
     if not force and up_to_date(context, candidate):

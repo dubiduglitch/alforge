@@ -17,6 +17,7 @@ from .commands import setup as setup_cmds
 from .commands import sync as sync_cmds
 from .commands import timer as timer_cmds
 from .commands import track as track_cmds
+from .commands import uri as uri_cmds
 from .config import SUPPORTED_FORGES
 from .context import Context
 from .errors import AlforgeError
@@ -171,6 +172,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p_timer.add_argument("--schedule", metavar="ONCALENDAR", help="systemd OnCalendar value")
     p_timer.add_argument("--randomized-delay", metavar="DELAY", help="systemd RandomizedDelaySec")
 
+    p_handle = subparsers.add_parser(
+        "handle-uri",
+        help="internal: act on an alforge:// URI opened by a browser",
+    )
+    p_handle.add_argument("uri", metavar="URI")
+
     subparsers.add_parser("version", help="show the alforge version")
 
     return parser
@@ -190,6 +197,7 @@ _DISPATCH = {
     "uninstall": local_cmds.cmd_uninstall,
     "purge": local_cmds.cmd_purge,
     "timer": timer_cmds.cmd_timer,
+    "handle-uri": uri_cmds.cmd_handle_uri,
 }
 
 #: Commands that rewrite state or the registry; they take the write lock.
@@ -206,6 +214,7 @@ _WRITE_COMMANDS = frozenset(
         "uninstall",
         "purge",
         "timer",
+        "handle-uri",
     }
 )
 

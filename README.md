@@ -87,6 +87,35 @@ is flagged as a pre-release, alforge falls back to the newest stable one (pass
 shows what is available. Because the cache key is derived from the asset id, an
 unchanged release is reused on the next run instead of being downloaded again.
 
+### Install from the browser
+
+The `.deb` registers the `alforge://` URI scheme, so a web page can ask alforge to
+install a project — the same trick GNOME-Look uses:
+
+```bash
+alforge://install/github/owner/repo      # install and start tracking
+alforge://track/codeberg/owner/repo      # only start tracking
+```
+
+A small content script adds an **Install with alforge** button to GitHub, GitLab
+and Codeberg project pages; clicking it just opens the matching URI. alforge then
+fetches the release, shows the **exact** artifact in a `zenity`/`kdialog` dialog,
+and installs only after you approve.
+
+Only forge *targets* are accepted: the scheme refuses a direct `.deb` URL, a
+query, a fragment, or an unknown forge, so a random web page can never point the
+pipeline at an artifact of its choosing. A missing dialog tool refuses too —
+approval is never assumed.
+
+Load the extension (a copy ships at `/usr/share/alforge/extension/chrome`):
+
+1. Install `zenity` or `kdialog` for the confirmation dialog.
+2. Open `chrome://extensions`, enable *Developer mode*, click *Load unpacked*, and
+   pick that directory.
+3. Visit any project page and click the button.
+
+Firefox can load the same unpacked directory from `about:debugging`.
+
 ## Files
 
 | File | Purpose |
@@ -139,8 +168,8 @@ You can also install `alforge` as a native Debian package:
 
 ```bash
 # Download from the latest release
-wget https://github.com/dubiduglitch/alforge/releases/download/v0.1.1/alforge_0.1.1-1_all.deb
-sudo dpkg -i alforge_0.1.1-1_all.deb
+wget https://github.com/dubiduglitch/alforge/releases/download/v0.2.0/alforge_0.2.0-1_all.deb
+sudo dpkg -i alforge_0.2.0-1_all.deb
 ```
 
 This installs `alforge` to `/usr/bin/alforge` with the Python package in `/usr/lib/python3/dist-packages/`. The package depends on `python3 (>= 3.11)`, `sudo`, `apt-utils`, and `dpkg` — all present on any Debian/Ubuntu system.

@@ -139,7 +139,8 @@ def cmd_upgrade(context, args) -> int:
                     context, target, plan, package=info.name, version=info.version, digest=digest
                 )
                 upgraded += 1
-                ui.ok(f"{target}: installed {info.name} {info.version}")
+                if not context.dry_run:
+                    ui.ok(f"{target}: installed {info.name} {info.version}")
         except Exception as exc:  # noqa: BLE001 - one bad repo must not stop the rest
             ui.error(f"{target}: {exc}")
             failed = max(failed, _exit_code(exc))
