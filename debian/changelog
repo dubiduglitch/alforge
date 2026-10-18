@@ -1,3 +1,14 @@
+alforge (0.3.0-1) unstable; urgency=medium
+
+  * Feature: add AppImage support alongside .deb. alforge can auto-detect the
+    format, install and upgrade AppImages as a per-user application, generate a
+    .desktop entry and icon, create a stable launch link in ~/.local/bin, and
+    purge them cleanly.
+  * Better messages: direct URL installs only accept .deb (explicit error for
+    AppImages) and asset selection is clearer.
+
+ -- dubiduglitch <dubiduglitch@users.noreply.github.com>  Sun, 18 Oct 2026 02:23:00 +0000
+
 alforge (0.2.1-1) unstable; urgency=medium
 
   * Fix: a browser-launched install was silent when it failed. Errors such as
