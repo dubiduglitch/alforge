@@ -11,4 +11,5 @@ debian/alforge/
 debian/.debhelper/
 debian/debhelper-build-stamp
 debian/alforge.substvars
+debian/*.debhelper
 *.debhelper.log
