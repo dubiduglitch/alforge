@@ -46,8 +46,12 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
 
+      - name: Move .deb to workspace
+        run: |
+          mv ../alforge_*.deb .
+
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:
           name: alforge-deb
-          path: ../alforge_*.deb
+          path: alforge_*.deb
