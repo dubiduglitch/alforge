@@ -22,6 +22,11 @@ def record_check(context, target: Target, candidate: Plan | None) -> None:  # no
         entry.last_tag = candidate.release.tag
         entry.last_asset = candidate.asset.name
         entry.last_asset_url = candidate.asset.url
+        # Extract version from tag (strip leading 'v' if present)
+        tag = candidate.release.tag
+        if tag.startswith("v"):
+            tag = tag[1:]
+        entry.last_version = tag
     if entry.package:
         entry.installed_version = installed_version_of(entry.kind, entry.package)
 

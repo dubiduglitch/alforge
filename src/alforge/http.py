@@ -109,44 +109,64 @@ class HttpClient:
         allow_404: bool = False,
     ) -> Response:
         last_error: Exception | None = None
-        for attempt in range(self.retries + 1):
-            request = urllib.request.Request(url, headers=self.headers_for(forge, accept))
+        # Try with token first, then without (if 401)
+        token_attempts = 2 if forge and self.tokens.get(forge) else 1
+        for token_attempt in range(token_attempts):
+            # On second attempt, temporarily remove token
+            if token_attempt == 1:
+                saved_token = self.tokens.pop(forge)
             try:
-                with self._opener.open(request, timeout=self.timeout) as response:
-                    return Response(
-                        status=response.status,
-                        body=response.read(),
-                        headers={k.lower(): v for k, v in response.headers.items()},
-                    )
-            except urllib.error.HTTPError as exc:
-                if exc.code == 404 and allow_404:
-                    return Response(404, b"", {})
-                if exc.code == 404:
-                    raise NotFoundError(f"not found: {url}") from exc
-                if exc.code in (403, 429):
-                    raise self._rate_limit_error(exc, url) from exc
-                if exc.code in RETRY_STATUSES and attempt < self.retries:
-                    last_error = exc
-                    time.sleep(1.0 + attempt)
-                    continue
-                raise NetworkError(
-                    f"HTTP {exc.code} for {url}",
-                    hint=exc.reason if isinstance(exc.reason, str) else None,
-                ) from exc
-            except urllib.error.URLError as exc:
-                last_error = exc
-                if attempt < self.retries:
-                    time.sleep(1.0 + attempt)
-                    continue
-                raise NetworkError(
-                    f"cannot reach {urllib.parse.urlsplit(url).netloc}: {exc.reason}",
-                    hint="check your network connection or proxy settings",
-                ) from exc
-            except TimeoutError as exc:
-                last_error = exc
-                if attempt < self.retries:
-                    continue
-                raise NetworkError(f"timed out after {self.timeout:.0f}s: {url}") from exc
+                for attempt in range(self.retries + 1):
+                    headers = self.headers_for(forge, accept) if token_attempt == 0 else self.headers_for(None, accept)
+                    request = urllib.request.Request(url, headers=headers)
+                    try:
+                        with self._opener.open(request, timeout=self.timeout) as response:
+                            return Response(
+                                status=response.status,
+                                body=response.read(),
+                                headers={k.lower(): v for k, v in response.headers.items()},
+                            )
+                    except urllib.error.HTTPError as exc:
+                        if exc.code == 404 and allow_404:
+                            return Response(404, b"", {})
+                        if exc.code == 404:
+                            raise NotFoundError(f"not found: {url}") from exc
+                        if exc.code in (403, 429):
+                            raise self._rate_limit_error(exc, url) from exc
+                        if exc.code in RETRY_STATUSES and attempt < self.retries:
+                            last_error = exc
+                            time.sleep(1.0 + attempt)
+                            continue
+                        # If 401 on first attempt (with token), break to try without token
+                        if exc.code == 401 and token_attempt == 0:
+                            last_error = exc
+                            break
+                        raise NetworkError(
+                            f"HTTP {exc.code} for {url}",
+                            hint=exc.reason if isinstance(exc.reason, str) else None,
+                        ) from exc
+                    except urllib.error.URLError as exc:
+                        last_error = exc
+                        if attempt < self.retries:
+                            time.sleep(1.0 + attempt)
+                            continue
+                        raise NetworkError(
+                            f"cannot reach {urllib.parse.urlsplit(url).netloc}: {exc.reason}",
+                            hint="check your network connection or proxy settings",
+                        ) from exc
+                    except TimeoutError as exc:
+                        last_error = exc
+                        if attempt < self.retries:
+                            continue
+                        raise NetworkError(f"timed out after {self.timeout:.0f}s: {url}") from exc
+            finally:
+                if token_attempt == 1:
+                    # Restore token
+                    self.tokens[forge] = saved_token
+            # If we got 401 on first attempt, continue to second attempt (without token)
+            if token_attempt == 0 and isinstance(last_error, urllib.error.HTTPError) and last_error.code == 401:
+                continue
+            break
         raise NetworkError(f"request failed: {url} ({last_error})")
 
     def get_json(self, url: str, *, forge: str | None = None, allow_404: bool = False) -> Any:
