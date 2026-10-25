@@ -1,0 +1,61 @@
+name: Bug Report
+description: Report a bug in alforge
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the sections below.
+  - type: input
+    id: version
+    attributes:
+      label: alforge version
+      description: Run `alforge --version` and paste the output
+      placeholder: "0.3.1"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: Distribution and version (e.g., Debian 13, Ubuntu 24.04, Linux Mint 22)
+      placeholder: "Debian 13 (trixie)"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Run `python3 --version`
+      placeholder: "3.13.5"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command that failed
+      description: The exact alforge command you ran
+      placeholder: "alforge install github:owner/repo"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / Error message
+      description: Paste the full output including any error messages
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other information (forge type, token setup, timer config, etc.)

@@ -172,8 +172,8 @@ You can also install `alforge` as a native Debian package:
 
 ```bash
 # Download from the latest release
-wget https://github.com/dubiduglitch/alforge/releases/download/v0.2.0/alforge_0.2.0-1_all.deb
-sudo dpkg -i alforge_0.2.0-1_all.deb
+wget https://github.com/dubiduglitch/alforge/releases/download/v0.3.1/alforge_0.3.1-1_all.deb
+sudo dpkg -i alforge_0.3.1-1_all.deb
 ```
 
 This installs `alforge` to `/usr/bin/alforge` with the Python package in `/usr/lib/python3/dist-packages/`. The package depends on `python3 (>= 3.11)`, `sudo`, `apt-utils`, and `dpkg` — all present on any Debian/Ubuntu system.
