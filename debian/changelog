@@ -1,3 +1,14 @@
+alforge (0.3.1-1) unstable; urgency=medium
+
+  * Fix: retry GitHub API anonymously on 401 when a PAT is invalid/expired.
+    The timer now keeps working (public 60 req/h limit) instead of hard-failing.
+  * Fix: record_check() now updates last_version from the release tag,
+    so 'alforge update' reports the correct available version instead of a
+    stale value.
+  * Bump pyproject.toml version to 0.3.1 (consistency with __init__.py).
+
+ -- dubiduglitch <dubiduglitch@users.noreply.github.com>  Sun, 25 Oct 2026 16:30:00 +0000
+
 alforge (0.3.0-1) unstable; urgency=medium
 
   * Feature: add AppImage support alongside .deb. alforge can auto-detect the
